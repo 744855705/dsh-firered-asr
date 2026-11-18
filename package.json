@@ -1,7 +1,7 @@
 {
   "name": "dsh-firered-asr",
-  "version": "0.1.0",
-  "description": "Local FireRedASR2-AED int8 speech-to-text provider for DeepSeek Harness, with padded Silero VAD segmentation",
+  "version": "0.1.1",
+  "description": "Local FireRedASR2-AED int8 speech-to-text provider for DeepSeek Harness, with padded Silero VAD segmentation and CT-Transformer punctuation",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
@@ -80,6 +80,7 @@
     "speech-to-text",
     "asr",
     "firered",
+    "punctuation",
     "sherpa-onnx",
     "voice-input"
   ],

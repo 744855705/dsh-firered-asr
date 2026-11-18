@@ -26,6 +26,13 @@ export interface DownloadAsset extends Omit<FileAsset, 'bytes'> {
   readonly fallbackUrl?: string
 }
 
+/** Optional CT-Transformer punctuation archive and extracted model identity. */
+export interface PunctuationLock {
+  readonly directory: string
+  readonly archive: DownloadAsset
+  readonly model: FileAsset
+}
+
 /** Release-pinned archive, VAD, and extracted model identity. */
 export interface RuntimeLock {
   readonly archive: DownloadAsset
@@ -36,15 +43,19 @@ export interface RuntimeLock {
     readonly decoder: FileAsset
     readonly tokens: FileAsset
   }
+  /** Missing on older/injected locks, which simply disables punctuation. */
+  readonly punctuation?: PunctuationLock | undefined
 }
 
-/** Prepared model, VAD, and worker paths, private to the local provider. */
+/** Prepared model, VAD, punctuation, and worker paths, private to the local provider. */
 export interface RuntimePaths {
   readonly encoder: string
   readonly decoder: string
   readonly tokens: string
   readonly vad: string
   readonly worker: string
+  /** Verified punctuation model; absent means fail-open without punctuation. */
+  readonly punctuationModel?: string | undefined
 }
 
 /** Resolved locations before any file is touched. */
@@ -53,6 +64,8 @@ export interface RuntimeTargets {
   readonly archivePath: string
   readonly vadPath: string
   readonly vadCandidates: readonly string[]
+  readonly punctuationRoot: string | undefined
+  readonly punctuationArchivePath: string | undefined
   readonly worker: string
 }
 
@@ -76,11 +89,18 @@ export function resolveTargets(config: Config, lock: RuntimeLock): RuntimeTarget
     ...(config.modelDirectory === undefined ? [] : [join(config.modelDirectory, lock.vad.name)]),
     join(config.dataRoot, 'models', 'silero', lock.vad.name),
   ]
+  const punctuation = lock.punctuation
+  const punctuationRoot = !config.punctuation || punctuation === undefined ? undefined
+    : config.punctuationModelDirectory ?? join(config.dataRoot, 'models', punctuation.directory)
+  const punctuationArchivePath = !config.punctuation || punctuation === undefined || config.punctuationModelDirectory !== undefined
+    ? undefined : join(config.dataRoot, 'cache', punctuation.archive.name)
   return {
     modelRoot,
     archivePath: config.archivePath ?? join(config.dataRoot, 'cache', lock.archive.name),
     vadPath: vadCandidates[vadCandidates.length - 1]!,
     vadCandidates,
+    punctuationRoot,
+    punctuationArchivePath,
     worker: fileURLToPath(new URL(import.meta.url.endsWith('.ts') ? './worker.ts' : './worker.js', import.meta.url)),
   }
 }
@@ -117,18 +137,22 @@ async function matchesDownload(path: string, asset: DownloadAsset, signal: Abort
   }
 }
 
+async function verifyFiles(root: string, files: readonly FileAsset[], signal: AbortSignal): Promise<boolean> {
+  for (const asset of files) {
+    if (!await matchesFile(join(root, asset.name), asset, signal)) return false
+  }
+  return true
+}
+
 /**
- * Verify the three extracted model files against their pinned size and hash.
+ * Verify the three extracted ASR model files against their pinned size and hash.
  * @param root - directory containing the pinned file names.
  * @param lock - pinned asset identity.
  * @param signal - preparation cancellation.
  * @returns true only when all three files exist and match.
  */
 export async function verifyModelFiles(root: string, lock: RuntimeLock, signal: AbortSignal): Promise<boolean> {
-  for (const asset of [lock.model.encoder, lock.model.decoder, lock.model.tokens]) {
-    if (!await matchesFile(join(root, asset.name), asset, signal)) return false
-  }
-  return true
+  return await verifyFiles(root, [lock.model.encoder, lock.model.decoder, lock.model.tokens], signal)
 }
 
 async function pickVad(targets: RuntimeTargets, lock: RuntimeLock, signal: AbortSignal): Promise<string> {
@@ -144,6 +168,17 @@ function archiveAssetFor(config: Config, lock: RuntimeLock): DownloadAsset {
   if (sha256 === undefined) throw new Error('modelSha256 is required when modelUrl is overridden')
   const bytes = config.modelUrl === lock.archive.url && sha256 === lock.archive.sha256 ? lock.archive.bytes : undefined
   return { name: lock.archive.name, url: config.modelUrl, sha256, ...bytes === undefined ? {} : { bytes } }
+}
+
+function punctuationArchiveAssetFor(config: Config, punctuation: PunctuationLock): DownloadAsset {
+  if (config.punctuationModelUrl === punctuation.archive.url && config.punctuationModelSha256 === undefined) {
+    return punctuation.archive
+  }
+  const sha256 = config.punctuationModelSha256
+  if (sha256 === undefined) throw new Error('punctuationModelSha256 is required when punctuationModelUrl is overridden')
+  const bytes = config.punctuationModelUrl === punctuation.archive.url && sha256 === punctuation.archive.sha256
+    ? punctuation.archive.bytes : undefined
+  return { name: punctuation.archive.name, url: config.punctuationModelUrl, sha256, ...bytes === undefined ? {} : { bytes } }
 }
 
 /**
@@ -221,20 +256,18 @@ async function downloadFrom(url: string, asset: DownloadAsset, destination: stri
   }
 }
 
-async function findModelDirectory(staging: string, lock: RuntimeLock): Promise<string> {
+async function findModelDirectory(staging: string, files: readonly FileAsset[]): Promise<string> {
   const nested = (await readdir(staging, { withFileTypes: true }))
     .filter(entry => entry.isDirectory()).map(entry => join(staging, entry.name))
   for (const candidate of [staging, ...nested]) {
     try {
-      for (const asset of [lock.model.encoder, lock.model.decoder, lock.model.tokens]) {
-        await access(join(candidate, asset.name))
-      }
+      for (const asset of files) await access(join(candidate, asset.name))
       return candidate
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
     }
   }
-  throw new Error(`FireRedASR2 model archive does not contain ${lock.model.encoder.name}, ${lock.model.decoder.name} and ${lock.model.tokens.name}`)
+  throw new Error(`FireRedASR2 model archive does not contain ${files.map(file => file.name).join(', ')}`)
 }
 
 function runTar(archive: string, staging: string, graceMs: number, signal: AbortSignal): Promise<void> {
@@ -279,17 +312,7 @@ function runTar(archive: string, staging: string, graceMs: number, signal: Abort
   })
 }
 
-/**
- * Extract the pinned archive into a staging directory, verify the extracted files, then publish
- * the model directory atomically. Cancellation or failure removes staging; a previously valid
- * model directory is replaced only after the staged copy has been verified.
- * @param archive - existing tar.bz2.
- * @param destination - final model directory.
- * @param lock - pinned model identity.
- * @param graceMs - tar termination grace.
- * @param signal - preparation cancellation or deadline.
- */
-export async function extractArchive(archive: string, destination: string, lock: RuntimeLock,
+async function extractFiles(archive: string, destination: string, files: readonly FileAsset[],
   graceMs: number, signal: AbortSignal): Promise<void> {
   const staging = join(dirname(destination), `.staging-${randomUUID()}`)
   let published = false
@@ -297,8 +320,8 @@ export async function extractArchive(archive: string, destination: string, lock:
   try {
     await runTar(archive, staging, graceMs, signal)
     signal.throwIfAborted()
-    const source = await findModelDirectory(staging, lock)
-    if (!await verifyModelFiles(source, lock, signal)) {
+    const source = await findModelDirectory(staging, files)
+    if (!await verifyFiles(source, files, signal)) {
       throw new Error('FireRedASR2 model verification failed: extracted files do not match the pinned sizes and hashes')
     }
     signal.throwIfAborted()
@@ -313,6 +336,21 @@ export async function extractArchive(archive: string, destination: string, lock:
   } finally {
     if (!published) await rm(staging, { recursive: true, force: true })
   }
+}
+
+/**
+ * Extract the pinned ASR archive into a staging directory, verify the extracted files, then publish
+ * the model directory atomically. Cancellation or failure removes staging; a previously valid
+ * model directory is replaced only after the staged copy has been verified.
+ * @param archive - existing tar.bz2.
+ * @param destination - final model directory.
+ * @param lock - pinned model identity.
+ * @param graceMs - tar termination grace.
+ * @param signal - preparation cancellation or deadline.
+ */
+export async function extractArchive(archive: string, destination: string, lock: RuntimeLock,
+  graceMs: number, signal: AbortSignal): Promise<void> {
+  await extractFiles(archive, destination, [lock.model.encoder, lock.model.decoder, lock.model.tokens], graceMs, signal)
 }
 
 async function ensureArchive(config: Config, targets: RuntimeTargets, lock: RuntimeLock,
@@ -339,6 +377,51 @@ async function ensureVad(targets: RuntimeTargets, lock: RuntimeLock,
   return await downloadAsset(lock.vad, targets.vadPath, signal, state => report({ ...state, step: 'vad' }))
 }
 
+async function inspectPunctuation(config: Config, targets: RuntimeTargets, lock: RuntimeLock,
+  signal: AbortSignal): Promise<string | undefined> {
+  const punctuation = lock.punctuation
+  if (!config.punctuation || punctuation === undefined || targets.punctuationRoot === undefined) return undefined
+  try {
+    const path = join(targets.punctuationRoot, punctuation.model.name)
+    return await matchesFile(path, punctuation.model, signal) ? path : undefined
+  } catch (error) {
+    if (signal.aborted) throw error
+    return undefined
+  }
+}
+
+/**
+ * Ensure the optional punctuation model, failing open. An explicit offline directory is verified
+ * but never downloaded; the managed path downloads and extracts the archive under the same `model`
+ * preparation step. Any non-cancellation failure disables punctuation and keeps ASR available.
+ */
+async function ensurePunctuation(config: Config, targets: RuntimeTargets, lock: RuntimeLock,
+  signal: AbortSignal, report: (state: SpeechPreparationState) => void): Promise<string | undefined> {
+  const punctuation = lock.punctuation
+  if (!config.punctuation || punctuation === undefined || targets.punctuationRoot === undefined) return undefined
+  const path = join(targets.punctuationRoot, punctuation.model.name)
+  try {
+    if (await matchesFile(path, punctuation.model, signal)) return path
+  } catch (error) {
+    if (signal.aborted) throw error
+    return undefined
+  }
+  if (config.punctuationModelDirectory !== undefined) return undefined
+  const archivePath = targets.punctuationArchivePath
+  if (archivePath === undefined) return undefined
+  try {
+    report({ phase: 'checking', step: 'model', startedAt: Date.now() })
+    await downloadAsset(punctuationArchiveAssetFor(config, punctuation), archivePath, signal,
+      state => report({ ...state, step: 'model' }))
+    report({ phase: 'checking', step: 'model', startedAt: Date.now() })
+    await extractFiles(archivePath, targets.punctuationRoot, [punctuation.model], config.graceMs, signal)
+    return await matchesFile(path, punctuation.model, signal) ? path : undefined
+  } catch (error) {
+    if (signal.aborted) throw error
+    return undefined
+  }
+}
+
 /**
  * Inspect existing models without downloading, writing files, or starting the worker.
  * @param config - model paths and inference settings.
@@ -352,12 +435,14 @@ export async function inspectRuntime(config: Config, signal: AbortSignal, lock: 
   if (!await verifyModelFiles(targets.modelRoot, lock, signal)) return undefined
   const vad = await pickVad(targets, lock, signal)
   if (!await matchesFile(vad, lock.vad, signal)) return undefined
+  const punctuationModel = await inspectPunctuation(config, targets, lock, signal)
   return {
     encoder: join(targets.modelRoot, lock.model.encoder.name),
     decoder: join(targets.modelRoot, lock.model.decoder.name),
     tokens: join(targets.modelRoot, lock.model.tokens.name),
     vad,
     worker: targets.worker,
+    ...punctuationModel === undefined ? {} : { punctuationModel },
   }
 }
 
@@ -379,11 +464,25 @@ export async function prepareRuntime(config: Config, signal: AbortSignal,
     report({ phase: 'checking', step: 'model', startedAt: Date.now() })
     await extractArchive(archive, modelRoot, lock, config.graceMs, signal)
   }
+  // The punctuation model shares the existing `model` step; its absence never fails ASR preparation.
+  const punctuationModel = await ensurePunctuation(config, targets, lock, signal, report)
   report({ phase: 'checking', step: 'vad', startedAt: Date.now() })
   const vad = await ensureVad(targets, lock, signal, report)
   report({ phase: 'checking', step: 'verify', startedAt: Date.now() })
   if (!await verifyModelFiles(modelRoot, lock, signal) || !await matchesFile(vad, lock.vad, signal)) {
     throw new Error('FireRedASR2 model verification failed: missing or corrupted model files')
+  }
+  let verifiedPunctuation = punctuationModel
+  if (verifiedPunctuation !== undefined) {
+    try {
+      const punctuation = lock.punctuation
+      if (punctuation === undefined || !await matchesFile(verifiedPunctuation, punctuation.model, signal)) {
+        verifiedPunctuation = undefined
+      }
+    } catch (error) {
+      if (signal.aborted) throw error
+      verifiedPunctuation = undefined
+    }
   }
   return {
     encoder: join(modelRoot, lock.model.encoder.name),
@@ -391,5 +490,6 @@ export async function prepareRuntime(config: Config, signal: AbortSignal,
     tokens: join(modelRoot, lock.model.tokens.name),
     vad,
     worker: targets.worker,
+    ...verifiedPunctuation === undefined ? {} : { punctuationModel: verifiedPunctuation },
   }
 }

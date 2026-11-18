@@ -35,12 +35,14 @@ function makeWave(pcm) {
 const modelDir = process.env.FIRERED_MODEL_DIR
 if (!modelDir) throw new Error('FIRERED_MODEL_DIR is required')
 const threads = Number(process.env.FIRERED_THREADS ?? '8')
-const config = Config({ dataRoot: join(tmpdir(), 'dsh-firered-bench'), modelDirectory: modelDir, threads })
+const punctuationModel = process.env.FIRERED_PUNCT_MODEL
+const punctuation = punctuationModel !== undefined && process.env.FIRERED_PUNCT !== '0'
+const config = Config({ dataRoot: join(tmpdir(), 'dsh-firered-bench'), modelDirectory: modelDir, threads, punctuation })
 const paths = await inspectRuntime(config, new AbortController().signal)
 if (!paths) throw new Error('model directory failed verification')
 
 const loadStart = performance.now()
-const transcriber = createTranscriber(Object.assign({}, config, paths))
+const transcriber = createTranscriber(Object.assign({}, config, paths, punctuation ? { punctuationModel } : {}))
 const loadMs = performance.now() - loadStart
 
 const sourceWave = readFileSync(join(modelDir, 'test_wavs', '0.wav'))
@@ -59,18 +61,26 @@ for (const seconds of [5, 10, 30]) {
   const wave = exactWave(seconds)
   const runs = []
   let text = ''
+  let punctuatedLast = false
+  let punctuationSeconds = 0
   for (let index = 0; index < 3; index++) {
     const result = transcriber(wave, 'auto')
     text = result.text
+    punctuatedLast = result.punctuated
+    punctuationSeconds = result.punctuationSeconds
     runs.push(result.inferenceSeconds)
   }
   const sorted = [...runs].sort((a, b) => a - b)
   const median = sorted[Math.floor(sorted.length / 2)]
-  clips.push({ seconds, runs, medianSeconds: median, rtf: median / seconds, textLength: [...text].length })
+  clips.push({
+    seconds, runs, medianSeconds: median, rtf: median / seconds,
+    textLength: [...text].length, punctuated: punctuatedLast, punctuationSeconds,
+  })
 }
 
 console.log(JSON.stringify({
   model: 'sherpa-onnx-fire-red-asr2-zh_en-int8-2026-02-26',
+  punctuationModel: punctuation ? punctuationModel : undefined,
   threads,
   loadMs: Math.round(loadMs),
   peakRssBytes: process.resourceUsage().maxRSS * 1024,

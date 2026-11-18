@@ -5,7 +5,7 @@ import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { Config, DEFAULT_MODEL_URL } from '../src/config.ts'
+import { Config, DEFAULT_MODEL_URL, DEFAULT_PUNCTUATION_MODEL_URL } from '../src/config.ts'
 import {
   downloadAsset, inspectRuntime, loadLock, prepareRuntime,
   type DownloadAsset, type FileAsset, type RuntimeLock,
@@ -60,6 +60,32 @@ async function writeVad(path: string, bytes: Buffer): Promise<void> {
   await writeFile(path, bytes)
 }
 
+const PUNCT_MODEL = Buffer.from('punct-model-bytes')
+
+async function writePunctuation(dir: string, bytes: Buffer = PUNCT_MODEL): Promise<void> {
+  await mkdir(dir, { recursive: true })
+  await writeFile(join(dir, 'model.int8.onnx'), bytes)
+}
+
+async function writeAsr(f: Fixture): Promise<void> {
+  await writeModel(f.modelDir, f.bytes)
+  await writeVad(join(f.modelDir, 'silero_vad.onnx'), f.vadBytes)
+}
+
+function punctuationLock(f: Fixture, archive: Buffer): RuntimeLock {
+  return {
+    ...f.lock,
+    punctuation: {
+      directory: 'fake-punct',
+      archive: {
+        name: 'punct.tar.bz2', url: DEFAULT_PUNCTUATION_MODEL_URL,
+        bytes: archive.length, sha256: sha(archive),
+      },
+      model: { name: 'model.int8.onnx', bytes: PUNCT_MODEL.length, sha256: sha(PUNCT_MODEL) },
+    },
+  }
+}
+
 describe('runtime lock', () => {
   it('pins the published archive and extracted file identities', () => {
     const lock = loadLock()
@@ -69,6 +95,11 @@ describe('runtime lock', () => {
     expect(lock.model.encoder).toMatchObject({ name: 'encoder.int8.onnx', bytes: 817286833 })
     expect(lock.model.decoder).toMatchObject({ name: 'decoder.int8.onnx', bytes: 417291928 })
     expect(lock.model.tokens).toMatchObject({ name: 'tokens.txt', bytes: 79172 })
+    expect(lock.punctuation).toMatchObject({
+      directory: 'sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12-int8',
+      archive: { bytes: 64717756, url: DEFAULT_PUNCTUATION_MODEL_URL },
+      model: { name: 'model.int8.onnx', bytes: 75519198 },
+    })
   })
 })
 
@@ -237,5 +268,73 @@ describe('downloadAsset', () => {
     await rejected
     const entries = await readdir(join(root, 'cache')).catch(() => [] as string[])
     expect(entries).toEqual([])
+  })
+})
+
+describe('punctuation runtime', () => {
+  it('inspects punctuation as optional and keeps ASR ready when it is absent', async () => {
+    const f = await fixture()
+    await writeAsr(f)
+    const puncDir = join(f.root, 'punct')
+    await writePunctuation(puncDir)
+    const lock = punctuationLock(f, Buffer.from('archive'))
+    const config = Config({ dataRoot: f.dataRoot, modelDirectory: f.modelDir, punctuationModelDirectory: puncDir })
+    const ready = await inspectRuntime(config, signal(), lock)
+    expect(ready?.punctuationModel).toBe(join(puncDir, 'model.int8.onnx'))
+    await rm(join(puncDir, 'model.int8.onnx'))
+    const missing = await inspectRuntime(config, signal(), lock)
+    expect(missing).toBeDefined()
+    expect(missing?.punctuationModel).toBeUndefined()
+    await writePunctuation(puncDir)
+    const disabled = await inspectRuntime(Config({ dataRoot: f.dataRoot, modelDirectory: f.modelDir,
+      punctuationModelDirectory: puncDir, punctuation: false }), signal(), lock)
+    expect(disabled?.punctuationModel).toBeUndefined()
+  })
+
+  it('fails open when an explicit punctuation directory is missing', async () => {
+    const f = await fixture()
+    await writeAsr(f)
+    const fetcher = vi.fn(); vi.stubGlobal('fetch', fetcher)
+    const config = Config({ dataRoot: f.dataRoot, modelDirectory: f.modelDir,
+      punctuationModelDirectory: join(f.root, 'missing-punct') })
+    const paths = await prepareRuntime(config, signal(), () => {}, punctuationLock(f, Buffer.from('archive')))
+    expect(paths.encoder).toBe(join(f.modelDir, 'encoder.int8.onnx'))
+    expect(paths.punctuationModel).toBeUndefined()
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  it('downloads and extracts punctuation within the model step', async () => {
+    const f = await fixture()
+    await writeAsr(f)
+    const source = join(f.root, 'punct-source'), dir = join(source, 'fake-punct')
+    await writePunctuation(dir)
+    const archive = join(f.root, 'punct.tar.bz2')
+    execFileSync('tar', ['-cjf', archive, '-C', source, 'fake-punct'])
+    const archiveBytes = await readFile(archive)
+    const lock = punctuationLock(f, archiveBytes)
+    const fetcher = vi.fn(async () => new Response(archiveBytes)); vi.stubGlobal('fetch', fetcher)
+    const report = vi.fn()
+    const dataRoot = join(f.root, 'data-punct')
+    const paths = await prepareRuntime(Config({ dataRoot, modelDirectory: f.modelDir }), signal(), report, lock)
+    expect(paths.punctuationModel).toBe(join(dataRoot, 'models', 'fake-punct', 'model.int8.onnx'))
+    expect(await readFile(paths.punctuationModel!)).toEqual(PUNCT_MODEL)
+    expect(fetcher).toHaveBeenCalledOnce()
+    expect(report.mock.calls.map(([state]) => state.step)).toContain('model')
+  })
+
+  it('fails open on a punctuation download or integrity failure and keeps ASR prepared', async () => {
+    const f = await fixture()
+    await writeAsr(f)
+    const lock = punctuationLock(f, Buffer.from('not-a-tar'))
+    vi.stubGlobal('fetch', async () => new Response(null, { status: 503 }))
+    const failed = await prepareRuntime(Config({ dataRoot: join(f.root, 'data-punct-fail'), modelDirectory: f.modelDir }),
+      signal(), () => {}, lock)
+    expect(failed.encoder).toBe(join(f.modelDir, 'encoder.int8.onnx'))
+    expect(failed.punctuationModel).toBeUndefined()
+    vi.stubGlobal('fetch', async () => new Response(Buffer.from('not-a-tar')))
+    const wrong = punctuationLock(f, Buffer.from('different-archive'))
+    const mismatch = await prepareRuntime(Config({ dataRoot: join(f.root, 'data-punct-bad'), modelDirectory: f.modelDir }),
+      signal(), () => {}, wrong)
+    expect(mismatch.punctuationModel).toBeUndefined()
   })
 })

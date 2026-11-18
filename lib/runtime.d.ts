@@ -12,6 +12,12 @@ export interface DownloadAsset extends Omit<FileAsset, 'bytes'> {
     readonly url: string;
     readonly fallbackUrl?: string;
 }
+/** Optional CT-Transformer punctuation archive and extracted model identity. */
+export interface PunctuationLock {
+    readonly directory: string;
+    readonly archive: DownloadAsset;
+    readonly model: FileAsset;
+}
 /** Release-pinned archive, VAD, and extracted model identity. */
 export interface RuntimeLock {
     readonly archive: DownloadAsset;
@@ -22,14 +28,18 @@ export interface RuntimeLock {
         readonly decoder: FileAsset;
         readonly tokens: FileAsset;
     };
+    /** Missing on older/injected locks, which simply disables punctuation. */
+    readonly punctuation?: PunctuationLock | undefined;
 }
-/** Prepared model, VAD, and worker paths, private to the local provider. */
+/** Prepared model, VAD, punctuation, and worker paths, private to the local provider. */
 export interface RuntimePaths {
     readonly encoder: string;
     readonly decoder: string;
     readonly tokens: string;
     readonly vad: string;
     readonly worker: string;
+    /** Verified punctuation model; absent means fail-open without punctuation. */
+    readonly punctuationModel?: string | undefined;
 }
 /** Resolved locations before any file is touched. */
 export interface RuntimeTargets {
@@ -37,6 +47,8 @@ export interface RuntimeTargets {
     readonly archivePath: string;
     readonly vadPath: string;
     readonly vadCandidates: readonly string[];
+    readonly punctuationRoot: string | undefined;
+    readonly punctuationArchivePath: string | undefined;
     readonly worker: string;
 }
 /**
@@ -52,7 +64,7 @@ export declare function loadLock(): RuntimeLock;
  */
 export declare function resolveTargets(config: Config, lock: RuntimeLock): RuntimeTargets;
 /**
- * Verify the three extracted model files against their pinned size and hash.
+ * Verify the three extracted ASR model files against their pinned size and hash.
  * @param root - directory containing the pinned file names.
  * @param lock - pinned asset identity.
  * @param signal - preparation cancellation.
@@ -72,7 +84,7 @@ export declare function verifyModelFiles(root: string, lock: RuntimeLock, signal
  */
 export declare function downloadAsset(asset: DownloadAsset, destination: string, signal: AbortSignal, report?: (state: SpeechPreparationState) => void): Promise<string>;
 /**
- * Extract the pinned archive into a staging directory, verify the extracted files, then publish
+ * Extract the pinned ASR archive into a staging directory, verify the extracted files, then publish
  * the model directory atomically. Cancellation or failure removes staging; a previously valid
  * model directory is replaced only after the staged copy has been verified.
  * @param archive - existing tar.bz2.

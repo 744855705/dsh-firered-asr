@@ -11,11 +11,16 @@ export interface InferenceConfig extends Config {
   readonly decoder: string
   readonly tokens: string
   readonly vad: string
+  /** Verified punctuation model; absent means fail-open without punctuation. */
+  readonly punctuationModel?: string | undefined
 }
 
-/** Native inference result with the number of decoded windows, used by integration tests and diagnostics. */
+/** Native inference result with decoded-window and punctuation diagnostics. */
 export interface Transcription extends Transcript {
   readonly segments: number
+  readonly punctuated: boolean
+  /** Time spent inside `addPunct`, isolated from ASR for the punctuation-overhead measurement. */
+  readonly punctuationSeconds: number
 }
 
 interface Stream {
@@ -37,14 +42,23 @@ interface Detector {
   flush(): void
 }
 
+interface Punctuator {
+  addPunct(text: string): string
+}
+
 interface Sherpa {
   OfflineRecognizer: new (config: object) => Recognizer
   Vad: new (config: object, bufferSeconds: number) => Detector
+  OfflinePunctuation: new (config: object) => Punctuator
 }
 
 interface RawSegment {
   readonly start: number
   readonly length: number
+}
+
+function warn(message: string): void {
+  process.stderr.write(`[dsh-firered-asr] ${message}\n`)
 }
 
 /** Native configuration is fixed per process; language hints are metadata only for the AED model. */
@@ -100,7 +114,48 @@ export function createTranscriber(config: InferenceConfig): (audio: Uint8Array, 
   const recognizer = new sherpa.OfflineRecognizer(nativeRecognizerConfig(config))
   const detector = new sherpa.Vad(vadConfig(config), config.segmentSeconds + config.minSilenceSeconds + 1)
 
+  // Punctuation is optional and fail-open: a missing, unloadable, or failing model must never
+  // prevent the ASR worker from returning its raw transcript.
+  let punctuator: Punctuator | undefined
+  if (config.punctuation) {
+    if (config.punctuationModel === undefined) {
+      warn('punctuation model is unavailable; returning unpunctuated text')
+    } else {
+      try {
+        punctuator = new sherpa.OfflinePunctuation({
+          model: { ctTransformer: config.punctuationModel, numThreads: config.threads, provider: 'cpu', debug: 0 },
+        })
+      } catch (error) {
+        warn(`punctuation model failed to load; returning unpunctuated text: ${error instanceof Error ? error.message : String(error)}`)
+      }
+    }
+  }
+
   return (audio, language) => {
+    let punctuated = false
+    let punctuationSeconds = 0
+    // One call for the final joined transcript: VAD segments have no reliable sentence context
+    // on their own, so punctuating them separately would produce fragmented or duplicated marks.
+    const punctuate = (text: string): string => {
+      if (punctuator === undefined || text.trim().length === 0) return text
+      try {
+        const started = performance.now()
+        const result = punctuator.addPunct(text)
+        punctuationSeconds += (performance.now() - started) / 1000
+        if (result.trim().length === 0) {
+          warn('punctuation returned empty text; returning unpunctuated text')
+          punctuator = undefined
+          return text
+        }
+        punctuated = true
+        return result
+      } catch (error) {
+        warn(`punctuation failed; returning unpunctuated text: ${error instanceof Error ? error.message : String(error)}`)
+        punctuator = undefined
+        return text
+      }
+    }
+
     const audioSeconds = validateInput(audio, language, config.maxAudioBytes)
     const samples = waveToSamples(audio)
     detector.reset()
@@ -108,8 +163,11 @@ export function createTranscriber(config: InferenceConfig): (audio: Uint8Array, 
 
     if (audioSeconds <= config.directDecodeSeconds) {
       // Short recordings are decoded whole: no VAD boundary, no padding, no join.
-      const text = decode(recognizer, samples).trim()
-      return { text, audioSeconds, inferenceSeconds: (performance.now() - started) / 1000, segments: 1 }
+      const text = punctuate(decode(recognizer, samples).trim())
+      return {
+        text, audioSeconds, inferenceSeconds: (performance.now() - started) / 1000,
+        segments: 1, punctuated, punctuationSeconds,
+      }
     }
 
     const raw: RawSegment[] = []
@@ -140,8 +198,8 @@ export function createTranscriber(config: InferenceConfig): (audio: Uint8Array, 
       texts.push(decode(recognizer, window).trim())
     }
     return {
-      text: joinTranscripts(texts), audioSeconds,
-      inferenceSeconds: (performance.now() - started) / 1000, segments: plans.length,
+      text: punctuate(joinTranscripts(texts)), audioSeconds,
+      inferenceSeconds: (performance.now() - started) / 1000, segments: plans.length, punctuated, punctuationSeconds,
     }
   }
 }

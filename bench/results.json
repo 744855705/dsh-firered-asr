@@ -5,42 +5,81 @@
     "memoryBytes": 98462781440,
     "node": "v24.22.0",
     "sherpaOnnxNode": "1.13.8",
-    "model": "sherpa-onnx-fire-red-asr2-zh_en-int8-2026-02-26",
+    "asrModel": "sherpa-onnx-fire-red-asr2-zh_en-int8-2026-02-26",
+    "punctuationModel": "sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12-int8",
     "threads": 8,
-    "provider": "cpu"
+    "provider": "cpu",
+    "hostLoadAverage": 16.6
   },
   "runs": [
     {
-      "id": "run1",
-      "note": "less contention; per-clip median of the two warm runs",
+      "id": "0.1.0-run1",
+      "note": "earlier lower-load run; per-clip median of the two warm runs",
       "loadMs": 1706,
       "peakRssBytes": 2462715904,
       "clips": [
-        { "seconds": 5, "runs": [0.667166455, 0.676930476, 0.7107169100000001], "medianSeconds": 0.7107169100000001, "rtf": 0.14214338200000004 },
-        { "seconds": 10, "runs": [1.6370593569999992, 1.6490868519999995, 1.8708416330000008], "medianSeconds": 1.8708416330000008, "rtf": 0.18708416330000008 },
-        { "seconds": 30, "runs": [9.133643379999999, 8.773658718999998, 8.874143816999997], "medianSeconds": 8.874143816999997, "rtf": 0.29580479389999986 }
+        { "seconds": 5, "runs": [0.667166455, 0.676930476, 0.7107169100000001], "medianSeconds": 0.7107169100000001, "rtf": 0.14214338200000004, "textLength": 19 },
+        { "seconds": 10, "runs": [1.6370593569999992, 1.6490868519999995, 1.8708416330000008], "medianSeconds": 1.8708416330000008, "rtf": 0.18708416330000008, "textLength": 49 },
+        { "seconds": 30, "runs": [9.133643379999999, 8.773658718999998, 8.874143816999997], "medianSeconds": 8.874143816999997, "rtf": 0.29580479389999986, "textLength": 147 }
       ]
     },
     {
-      "id": "run2",
+      "id": "0.1.0-run2",
       "note": "shared host, load average 14.22; per-clip median of three runs",
       "loadMs": 2607,
       "peakRssBytes": 2424688640,
       "clips": [
-        { "seconds": 5, "runs": [1.2215315429999996, 1.2003092239999997, 1.1729852520000004], "medianSeconds": 1.2003092239999997, "rtf": 0.24006184479999995 },
-        { "seconds": 10, "runs": [2.629126249999999, 2.7870061779999995, 2.8894876629999997], "medianSeconds": 2.7870061779999995, "rtf": 0.27870061779999994 },
-        { "seconds": 30, "runs": [13.340468236000001, 13.320964767000001, 13.909790778000003], "medianSeconds": 13.340468236000001, "rtf": 0.44468227453333337 }
+        { "seconds": 5, "runs": [1.2215315429999996, 1.2003092239999997, 1.1729852520000004], "medianSeconds": 1.2003092239999997, "rtf": 0.24006184479999995, "textLength": 19 },
+        { "seconds": 10, "runs": [2.629126249999999, 2.7870061779999995, 2.8894876629999997], "medianSeconds": 2.7870061779999995, "rtf": 0.27870061779999994, "textLength": 49 },
+        { "seconds": 30, "runs": [13.340468236000001, 13.320964767000001, 13.909790778000003], "medianSeconds": 13.340468236000001, "rtf": 0.44468227453333337, "textLength": 147 }
+      ]
+    },
+    {
+      "id": "0.1.1-asr-only",
+      "note": "2026-11-19 03:05 +08:00; shared host load ~16.7; no punctuation",
+      "loadMs": 3182,
+      "peakRssBytes": 2444144640,
+      "clips": [
+        { "seconds": 5, "runs": [1.1754353430000002, 1.2484570739999998, 1.3338594730000004], "medianSeconds": 1.2484570739999998, "rtf": 0.24969141479999996, "textLength": 19, "punctuated": false },
+        { "seconds": 10, "runs": [3.2071545209999996, 2.996261413, 3.2050844879999985], "medianSeconds": 3.2050844879999985, "rtf": 0.32050844879999985, "textLength": 49, "punctuated": false },
+        { "seconds": 30, "runs": [14.29928409, 14.990258205000002, 13.785038472999993], "medianSeconds": 14.29928409, "rtf": 0.476642803, "textLength": 147, "punctuated": false }
+      ]
+    },
+    {
+      "id": "0.1.1-with-punctuation",
+      "note": "same host and script as asr-only; CT-Transformer punctuation loaded",
+      "loadMs": 3277,
+      "peakRssBytes": 2478878720,
+      "clips": [
+        { "seconds": 5, "runs": [1.2455274760000001, 1.1073940300000005, 1.29149435], "medianSeconds": 1.2455274760000001, "rtf": 0.24910549520000003, "textLength": 19, "punctuated": true },
+        { "seconds": 10, "runs": [3.118828897, 3.191673111, 3.1211722419999988], "medianSeconds": 3.1211722419999988, "rtf": 0.3121172241999999, "textLength": 49, "punctuated": true },
+        { "seconds": 30, "runs": [13.215922406999999, 14.950065380999996, 14.567805753], "medianSeconds": 14.567805753, "rtf": 0.4855935251, "textLength": 147, "punctuated": true }
       ]
     }
   ],
+  "punctuationDelta": {
+    "archiveBytes": 64717756,
+    "modelBytes": 75519198,
+    "peakRssDeltaBytes": 34734080,
+    "rtfDeltaFraction": { "5": -0.00235, "10": -0.02618, "30": 0.01878 },
+    "addPunctSecondsRange": [0.00079, 0.008397774]
+  },
   "endToEndWorker": {
-    "coldStartMs": 2330.9617550000003,
+    "coldStartMs": 4163.282766999997,
     "sample0Seconds": 10.053125,
-    "sample0InferenceSeconds": 1.6487556939999997,
+    "sample0InferenceSeconds": 2.666673259,
     "sample1Seconds": 5.1,
-    "sample1InferenceSeconds": 0.8177046329999998,
+    "sample1InferenceSeconds": 1.590191111,
+    "sample3Seconds": 8.83,
+    "sample3InferenceSeconds": 2.921434692,
     "longSeconds": 66.31875,
     "longSegments": 12,
-    "longInferenceSeconds": 8.521759311
+    "longInferenceSeconds": 15.502721847,
+    "addPunctSeconds": {
+      "sample0": 0.002826151,
+      "sample1": 0.008397774,
+      "sample3": 0.008249133
+    },
+    "failOpen": { "punctuated": false }
   }
 }

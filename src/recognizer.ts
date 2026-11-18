@@ -132,6 +132,12 @@ export class FireRedWorker {
     return () => { this.listeners.delete(listener) }
   }
 
+  private warnPunctuation(runtime: RuntimePaths): void {
+    if (this.config.punctuation && runtime.punctuationModel === undefined) {
+      this.ctx.logger.warn('FireRedASR2 punctuation model is unavailable; returning unpunctuated text')
+    }
+  }
+
   private publish(state: SpeechPreparationState): void {
     if (this.preparing && ['ready', 'standby', 'unprepared', 'failed', 'cancelled'].includes(state.phase)) {
       this.preparing.completed = true
@@ -163,6 +169,7 @@ export class FireRedWorker {
       const runtime = await inspectRuntime(this.config, inspection.signal)
       inspection.signal.throwIfAborted()
       this.runtime = runtime
+      if (runtime !== undefined) this.warnPunctuation(runtime)
       this.publish({ phase: runtime ? 'standby' : 'unprepared', steps: this.state.steps.map(({ kind }) => ({ kind,
         status: kind === 'check' || runtime && kind !== 'load' ? 'complete' : 'pending',
       })) })
@@ -246,6 +253,7 @@ export class FireRedWorker {
     if (!cached) this.publish({ phase: 'checking', step: 'check', startedAt: Date.now() })
     const runtime = this.runtime ?? await prepareRuntime(this.config, setup.signal, (state) => { this.publish(state) })
     this.runtime = runtime
+    this.warnPunctuation(runtime)
     setup.signal.throwIfAborted()
     this.publish({ phase: cached ? 'waking' : 'loading', step: 'load', startedAt: Date.now() })
     await mkdir(this.config.dataRoot, { recursive: true })

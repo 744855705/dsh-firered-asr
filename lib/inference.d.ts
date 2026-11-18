@@ -6,10 +6,15 @@ export interface InferenceConfig extends Config {
     readonly decoder: string;
     readonly tokens: string;
     readonly vad: string;
+    /** Verified punctuation model; absent means fail-open without punctuation. */
+    readonly punctuationModel?: string | undefined;
 }
-/** Native inference result with the number of decoded windows, used by integration tests and diagnostics. */
+/** Native inference result with decoded-window and punctuation diagnostics. */
 export interface Transcription extends Transcript {
     readonly segments: number;
+    readonly punctuated: boolean;
+    /** Time spent inside `addPunct`, isolated from ASR for the punctuation-overhead measurement. */
+    readonly punctuationSeconds: number;
 }
 /**
  * Load one native model pair and expose synchronous transcription for its dedicated process.

@@ -29,5 +29,19 @@
       "bytes": 79172,
       "sha256": "1bc613de2112d257e61a349c3e72d1b1a9cf19c33d3ca954197ad2171e5ea07b"
     }
+  },
+  "punctuation": {
+    "directory": "sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12-int8",
+    "archive": {
+      "name": "sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12-int8.tar.bz2",
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/punctuation-models/sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12-int8.tar.bz2",
+      "bytes": 64717756,
+      "sha256": "c0d5aa5f8eeb686032345e180bedf39319dc2e0556781c6264bcadba8328a6e1"
+    },
+    "model": {
+      "name": "model.int8.onnx",
+      "bytes": 75519198,
+      "sha256": "65a3fb9f5ad7bfb96bf69e0dc4481df97f6ee60513c1d94ce981ba6effd524b1"
+    }
   }
 }

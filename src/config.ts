@@ -6,6 +6,9 @@ import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
 /** Release-pinned archive URL; an override must also provide `modelSha256`. */
 export const DEFAULT_MODEL_URL = 'https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-fire-red-asr2-zh_en-int8-2026-02-26.tar.bz2'
 
+/** Release-pinned CT-Transformer punctuation archive URL; an override must also provide `punctuationModelSha256`. */
+export const DEFAULT_PUNCTUATION_MODEL_URL = 'https://github.com/k2-fsa/sherpa-onnx/releases/download/punctuation-models/sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12-int8.tar.bz2'
+
 /** Local runtime, inference, segmentation, and retention settings. */
 export interface Config {
   /** Unique registration id; consumers select this exact id. */
@@ -20,6 +23,14 @@ export interface Config {
   modelUrl: string
   /** Expected SHA-256 of the archive; required when `modelUrl` is overridden. */
   modelSha256?: string | undefined
+  /** Enable the optional CT-Transformer punctuation model; a missing or failed model returns unpunctuated text. */
+  punctuation: boolean
+  /** Existing absolute directory containing model.int8.onnx; skips the punctuation archive. */
+  punctuationModelDirectory?: string | undefined
+  /** HTTPS punctuation archive URL; overriding it requires `punctuationModelSha256`. */
+  punctuationModelUrl: string
+  /** Expected SHA-256 of the punctuation archive; required when `punctuationModelUrl` is overridden. */
+  punctuationModelSha256?: string | undefined
   /** CPU intra-operation thread count. */
   threads: number
   /** Recordings at or below this duration use one stream instead of VAD segmentation. */
@@ -64,6 +75,10 @@ export const Config: z<Partial<Config>, Config> = z.object({
   archivePath: z.union([z.string().min(1), z.const(undefined)]),
   modelUrl: z.string().pattern(/^https:\/\/[^\s]+$/).default(DEFAULT_MODEL_URL),
   modelSha256: z.union([z.string().pattern(/^[a-f0-9]{64}$/), z.const(undefined)]),
+  punctuation: z.boolean().default(true),
+  punctuationModelDirectory: z.union([z.string().min(1), z.const(undefined)]),
+  punctuationModelUrl: z.string().pattern(/^https:\/\/[^\s]+$/).default(DEFAULT_PUNCTUATION_MODEL_URL),
+  punctuationModelSha256: z.union([z.string().pattern(/^[a-f0-9]{64}$/), z.const(undefined)]),
   threads: z.natural().min(1).default(8),
   directDecodeSeconds: z.number().min(1).max(120).default(30),
   segmentSeconds: z.number().min(1).max(120).default(30),
@@ -83,27 +98,36 @@ export const Config: z<Partial<Config>, Config> = z.object({
   progressIntervalMs: z.natural().min(1).max(MAX_TIMER_DELAY_MS).default(100),
 })
 
+/** Reject a model URL that is not HTTPS or embeds credentials. */
+function validateHttpsModelUrl(value: string, name: string): void {
+  let url: URL
+  try { url = new URL(value) }
+  catch (error) { throw new Error(`FireRedASR2 ${name} is not a valid URL`, { cause: error }) }
+  if (url.protocol !== 'https:' || url.username !== '' || url.password !== '') {
+    throw new Error(`FireRedASR2 ${name} must be an HTTPS URL without credentials`)
+  }
+}
+
 /**
  * Validate deployment-varying choices before registration.
  * @param config - schema-validated configuration.
- * @throws when a path is relative, two offline sources are mixed, the URL is unsafe,
+ * @throws when a path is relative, two offline sources are mixed, a URL is unsafe,
  *   an override lacks its hash, or VAD padding leaves no room for speech.
  */
 export function validateConfig(config: Config): void {
-  for (const path of [config.dataRoot, config.modelDirectory, config.archivePath]) {
+  for (const path of [config.dataRoot, config.modelDirectory, config.archivePath, config.punctuationModelDirectory]) {
     if (path !== undefined && !isAbsolute(path)) throw new Error(`FireRedASR2 paths must be absolute: ${path}`)
   }
   if (config.modelDirectory !== undefined && config.archivePath !== undefined) {
     throw new Error('FireRedASR2 accepts either modelDirectory or archivePath, not both')
   }
-  let url: URL
-  try { url = new URL(config.modelUrl) }
-  catch (error) { throw new Error('FireRedASR2 modelUrl is not a valid URL', { cause: error }) }
-  if (url.protocol !== 'https:' || url.username !== '' || url.password !== '') {
-    throw new Error('FireRedASR2 modelUrl must be an HTTPS URL without credentials')
-  }
+  validateHttpsModelUrl(config.modelUrl, 'modelUrl')
+  validateHttpsModelUrl(config.punctuationModelUrl, 'punctuationModelUrl')
   if (config.modelUrl !== DEFAULT_MODEL_URL && config.modelSha256 === undefined) {
     throw new Error('FireRedASR2 modelSha256 is required when modelUrl is overridden')
+  }
+  if (config.punctuationModelUrl !== DEFAULT_PUNCTUATION_MODEL_URL && config.punctuationModelSha256 === undefined) {
+    throw new Error('FireRedASR2 punctuationModelSha256 is required when punctuationModelUrl is overridden')
   }
   if (config.segmentSeconds - config.vadOnsetPaddingSeconds - config.vadTailPaddingSeconds < 0.5) {
     throw new Error('FireRedASR2 segmentSeconds must leave at least 0.5s after VAD padding')

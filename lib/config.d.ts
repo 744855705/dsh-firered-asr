@@ -1,6 +1,8 @@
 import z from '@deepseek-ai/schemastery';
 /** Release-pinned archive URL; an override must also provide `modelSha256`. */
 export declare const DEFAULT_MODEL_URL = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-fire-red-asr2-zh_en-int8-2026-02-26.tar.bz2";
+/** Release-pinned CT-Transformer punctuation archive URL; an override must also provide `punctuationModelSha256`. */
+export declare const DEFAULT_PUNCTUATION_MODEL_URL = "https://github.com/k2-fsa/sherpa-onnx/releases/download/punctuation-models/sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12-int8.tar.bz2";
 /** Local runtime, inference, segmentation, and retention settings. */
 export interface Config {
     /** Unique registration id; consumers select this exact id. */
@@ -15,6 +17,14 @@ export interface Config {
     modelUrl: string;
     /** Expected SHA-256 of the archive; required when `modelUrl` is overridden. */
     modelSha256?: string | undefined;
+    /** Enable the optional CT-Transformer punctuation model; a missing or failed model returns unpunctuated text. */
+    punctuation: boolean;
+    /** Existing absolute directory containing model.int8.onnx; skips the punctuation archive. */
+    punctuationModelDirectory?: string | undefined;
+    /** HTTPS punctuation archive URL; overriding it requires `punctuationModelSha256`. */
+    punctuationModelUrl: string;
+    /** Expected SHA-256 of the punctuation archive; required when `punctuationModelUrl` is overridden. */
+    punctuationModelSha256?: string | undefined;
     /** CPU intra-operation thread count. */
     threads: number;
     /** Recordings at or below this duration use one stream instead of VAD segmentation. */
@@ -55,7 +65,7 @@ export declare const Config: z<Partial<Config>, Config>;
 /**
  * Validate deployment-varying choices before registration.
  * @param config - schema-validated configuration.
- * @throws when a path is relative, two offline sources are mixed, the URL is unsafe,
+ * @throws when a path is relative, two offline sources are mixed, a URL is unsafe,
  *   an override lacks its hash, or VAD padding leaves no room for speech.
  */
 export declare function validateConfig(config: Config): void;

@@ -43,6 +43,7 @@ export declare class FireRedWorker {
      * @returns subscription disposer.
      */
     subscribe(listener: () => void): () => void;
+    private warnPunctuation;
     private publish;
     /** Inspect disk caches on activation; valid resources enter standby without starting a worker. */
     inspect(): void;
