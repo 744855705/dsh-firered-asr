@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "FireRedASR2-AED (int8)",
+    "description": "本地 CPU 语音识别；VAD 分段两端回填，修正首尾丢字，音频不出本机。"
+  }
+}

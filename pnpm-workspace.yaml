@@ -1,0 +1,11 @@
+packages:
+  - .
+
+# esbuild ships a native binary and needs its install script; everything else
+# in this package is pure JavaScript or a prebuilt native addon.
+allowBuilds:
+  esbuild: true
+
+# This is an application package, not the DSH monorepo; fresh plugin releases
+# are intentional and are qualified by the checks in this repository.
+minimumReleaseAge: 0

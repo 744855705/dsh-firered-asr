@@ -1,0 +1,89 @@
+{
+  "name": "dsh-firered-asr",
+  "version": "0.1.0",
+  "description": "Local FireRedASR2-AED int8 speech-to-text provider for DeepSeek Harness, with padded Silero VAD segmentation",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "icon": "./icon.svg",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./worker": {
+      "types": "./lib/worker.d.ts",
+      "default": "./lib/worker.js"
+    },
+    "./package.json": "./package.json",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "lib/**/*.js",
+    "lib/**/*.d.ts",
+    "lib/**/*.js.map",
+    "runtime/assets.json",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "bench",
+    "README.md",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md",
+    "src"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=24.9.0",
+    "dsh": ">=0.2.2-rc.3 <0.3.0"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --config vitest.config.ts",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "bench": "node scripts/bench.mjs",
+    "pack": "pnpm pack"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-experimental-speech-to-text": "0.2.2-rc.3",
+    "@deepseek-ai/dsh-timeout": "0.2.2-rc.3",
+    "@deepseek-ai/schemastery": "^3.19.0",
+    "sherpa-onnx-node": "1.13.8",
+    "zod": "4.6.6"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "~4.1.0",
+    "@deepseek-ai/dsh-subprocess": "0.2.2-rc.3"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "~4.1.0",
+    "@deepseek-ai/dsh-subprocess": "0.2.2-rc.3",
+    "@types/node": "^24.0.0",
+    "@types/semver": "^7.7.0",
+    "semver": "^7.7.0",
+    "tsx": "^4.23.13",
+    "typescript": "6.0.3",
+    "vitest": "4.1.11"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "dsh-plugin",
+    "speech-to-text",
+    "asr",
+    "firered",
+    "sherpa-onnx",
+    "voice-input"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

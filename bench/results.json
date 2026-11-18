@@ -1,0 +1,46 @@
+{
+  "environment": {
+    "platform": "linux-x64",
+    "logicalCpus": 16,
+    "memoryBytes": 98462781440,
+    "node": "v24.22.0",
+    "sherpaOnnxNode": "1.13.8",
+    "model": "sherpa-onnx-fire-red-asr2-zh_en-int8-2026-02-26",
+    "threads": 8,
+    "provider": "cpu"
+  },
+  "runs": [
+    {
+      "id": "run1",
+      "note": "less contention; per-clip median of the two warm runs",
+      "loadMs": 1706,
+      "peakRssBytes": 2462715904,
+      "clips": [
+        { "seconds": 5, "runs": [0.667166455, 0.676930476, 0.7107169100000001], "medianSeconds": 0.7107169100000001, "rtf": 0.14214338200000004 },
+        { "seconds": 10, "runs": [1.6370593569999992, 1.6490868519999995, 1.8708416330000008], "medianSeconds": 1.8708416330000008, "rtf": 0.18708416330000008 },
+        { "seconds": 30, "runs": [9.133643379999999, 8.773658718999998, 8.874143816999997], "medianSeconds": 8.874143816999997, "rtf": 0.29580479389999986 }
+      ]
+    },
+    {
+      "id": "run2",
+      "note": "shared host, load average 14.22; per-clip median of three runs",
+      "loadMs": 2607,
+      "peakRssBytes": 2424688640,
+      "clips": [
+        { "seconds": 5, "runs": [1.2215315429999996, 1.2003092239999997, 1.1729852520000004], "medianSeconds": 1.2003092239999997, "rtf": 0.24006184479999995 },
+        { "seconds": 10, "runs": [2.629126249999999, 2.7870061779999995, 2.8894876629999997], "medianSeconds": 2.7870061779999995, "rtf": 0.27870061779999994 },
+        { "seconds": 30, "runs": [13.340468236000001, 13.320964767000001, 13.909790778000003], "medianSeconds": 13.340468236000001, "rtf": 0.44468227453333337 }
+      ]
+    }
+  ],
+  "endToEndWorker": {
+    "coldStartMs": 2330.9617550000003,
+    "sample0Seconds": 10.053125,
+    "sample0InferenceSeconds": 1.6487556939999997,
+    "sample1Seconds": 5.1,
+    "sample1InferenceSeconds": 0.8177046329999998,
+    "longSeconds": 66.31875,
+    "longSegments": 12,
+    "longInferenceSeconds": 8.521759311
+  }
+}

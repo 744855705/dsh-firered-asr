@@ -1,0 +1,14 @@
+# dsh-firered-asr — one provider row only.
+#
+# This bundle deliberately does NOT insert the official speech-to-text,
+# api-speech-to-text or client-ui-voice-input rows. The official
+# @deepseek-ai/dsh-experimental-voice-input-bundle already owns those rows in
+# the default web profile; adding a second copy would duplicate them.
+#
+# The provider id `firered-local` is registered by this package. Switch to it
+# in Settings -> Voice -> Recognizer; the row's dataRoot is the model cache.
+- insert:
+    - id: firered-asr
+      name: 'dsh-firered-asr'
+      config:
+        dataRoot: !!js dshHomePath('speech-to-text', 'firered')

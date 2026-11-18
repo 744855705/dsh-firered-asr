@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "FireRedASR2-AED (int8)",
+    "description": "Local CPU speech recognition with padded Silero VAD segmentation; audio stays on this machine."
+  }
+}
