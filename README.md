@@ -13,6 +13,10 @@ DeepSeek Harness（dsh）的本地离线语音识别 provider。麦克风录音�
 
 - **本地 CPU 推理**：无 CUDA/ROCm、无 Python、无编译依赖；使用已发布的
   `sherpa-onnx-node@1.13.8` 及其预编译 ONNX Runtime。
+- **复用运行中 DSH 的官方实现**：不把 `@deepseek-ai/dsh-experimental-speech-to-text` /
+  `@deepseek-ai/dsh-timeout` 装进 profile；启动时从 `DSH_INSTALL_DIR` 解析 DSH 自带的官方
+  voice-input bundle，动态 import 官方 `validateWave` 与 timeout helper；官方服务行与
+  FireRed provider 行保持独立，provider 行失败不会拖垮官方 SenseVoice 服务行。
 - **按需准备**：激活只检查磁盘缓存，不下载、不加载模型；用户点“准备”才下载
   838,589,068 B 的 tar.bz2（以及 1.8 MB Silero VAD），并在解压后逐文件校验大小和
   SHA-256。
@@ -28,7 +32,9 @@ DeepSeek Harness（dsh）的本地离线语音识别 provider。麦克风录音�
 
 ## 环境要求
 
-- dsh `>= 0.2.2-rc.3 <= 0.5.0`（兼容检查开启 includePrerelease，0.5.0/0.5.0-rc 可用，0.5.1 不保证），Node `>= 24.9.0`。
+- dsh `>= 0.2.2-rc.1 <= 0.5.0`（兼容检查开启 includePrerelease，0.2.2-rc.1/0.5.0/0.5.0-rc 可用，0.5.1 不保证），Node `>= 24.9.0`。
+- 运行时必须存在 `DSH_INSTALL_DIR`（DSH 进程自带）；FireRed 从运行中的 DSH 安装解析官方
+  speech-to-text/timeout 实现，不把官方包装进 profile。
 - 官方 voice-input bundle（默认 web profile 已包含）：
   `@deepseek-ai/dsh-experimental-voice-input-bundle`。
 - CPU 推理；首次准备磁盘约 2.7 GB（ASR 压缩包/解压模型 + VAD + 64.7 MB 标点包 + 临时
@@ -40,7 +46,7 @@ DeepSeek Harness（dsh）的本地离线语音识别 provider。麦克风录音�
 ### 从 tarball（推荐先验证构建产物）
 
 ```bash
-dsh plugin --profile web add ./dsh-firered-asr-0.1.2.tgz
+dsh plugin --profile web add ./dsh-firered-asr-0.1.3.tgz
 ```
 
 ### 从 GitHub（公开仓库）
@@ -216,7 +222,7 @@ FIRERED_MODEL_DIR=/abs/model FIRERED_PUNCT=0 pnpm bench
 ```
 
 本机实测（Linux x64，16 核 AMD CPU，无 CUDA，`threads=8`，`sherpa-onnx-node@1.13.8`）。
-主机共享且本轮负载更高（`/proc/loadavg` 6–20）；以下同时给出 0.1.1 的 ASR-only bench、
+主机共享且本轮负载更高（`/proc/loadavg` 6–20）；以下同时给出 0.1.1/0.1.2 的 ASR-only bench、
 早先较低负载的 ASR-only 区间，以及 ASR+标点的隔离成本：
 
 | 片段 | ASR-only | ASR + 标点 | RTF（ASR-only / +标点） |
@@ -259,6 +265,9 @@ FIRERED_MODEL_DIR=/abs/model FIRERED_PUNCT=0 pnpm bench
   并重跑校验，不在本包支持范围。
 - **标点离线**：`punctuationModelDirectory` 指向已解压标点目录；不配且无缓存时会尝试
   下载。标点包下载失败不会阻塞 ASR。
+- **宿主官方 helper**：`DSH_INSTALL_DIR` 缺失，或运行中 DSH 的官方 `validateWave`/timeout
+  API 发生破坏性变化时，FireRed provider 行会明确失败；官方 SenseVoice 服务行独立，不会
+  因此整体禁用。
 
 ## 许可
 

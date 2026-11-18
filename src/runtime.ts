@@ -8,7 +8,7 @@ import { Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { fileURLToPath } from 'node:url'
 import type { SpeechPreparationState } from '@deepseek-ai/dsh-experimental-speech-to-text/types'
-import { timeoutOf } from '@deepseek-ai/dsh-timeout'
+import { timeout } from './host.ts'
 import type { Config } from './config.ts'
 import { classifyDownloadFailure, SpeechDownloadError } from './download-error.ts'
 
@@ -32,6 +32,8 @@ export interface PunctuationLock {
   readonly archive: DownloadAsset
   readonly model: FileAsset
 }
+
+const { timeoutOf } = timeout
 
 /** Release-pinned archive, VAD, and extracted model identity. */
 export interface RuntimeLock {

@@ -1,5 +1,5 @@
 /** FireRedASR2 language support, canonical WAV validation, and input failures that leave native inference untouched. */
-import { validateWave } from '@deepseek-ai/dsh-experimental-speech-to-text/wave'
+import { validateWave } from './host.ts'
 
 /** Language hints accepted by provider metadata and the Remote consumer. */
 export const languages: readonly string[] = ['auto', 'zh', 'en']

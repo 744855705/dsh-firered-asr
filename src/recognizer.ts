@@ -4,12 +4,14 @@ import { mkdir } from 'node:fs/promises'
 import type { Context } from '@deepseek-ai/cordis'
 import type { SubprocessHandle } from '@deepseek-ai/dsh-subprocess'
 import type { SpeechPreparationOptions, SpeechInput, SpeechPreparationState, SpeechPreparationStep, SpeechPreparationStepKind, Transcript } from '@deepseek-ai/dsh-experimental-speech-to-text/types'
-import { deadline } from '@deepseek-ai/dsh-timeout'
+import { timeout } from './host.ts'
 import { z } from 'zod'
 import type { Config } from './config.ts'
 import { SpeechDownloadError } from './download-error.ts'
 import { SpeechInputError } from './input.ts'
 import { inspectRuntime, prepareRuntime, type RuntimePaths } from './runtime.ts'
+
+const { deadline } = timeout
 
 const transcriptSchema = z.object({
   text: z.string(), audioSeconds: z.number().nonnegative(), inferenceSeconds: z.number().nonnegative(),
@@ -261,7 +263,8 @@ export class FireRedWorker {
     const handle = this.ctx.subprocess.spawn({
       argv: [process.execPath, ...runtime.worker.endsWith('.ts') ? ['--import', import.meta.resolve('tsx/esm')] : [], runtime.worker, JSON.stringify(Object.assign({}, this.config, runtime))],
       cwd: this.config.dataRoot, graceMs: this.config.graceMs,
-      env: { DSH_SPEECH_TOKEN: token, ELECTRON_RUN_AS_NODE: '1' },
+      env: { DSH_SPEECH_TOKEN: token, ELECTRON_RUN_AS_NODE: '1',
+        ...(process.env.DSH_INSTALL_DIR === undefined ? {} : { DSH_INSTALL_DIR: process.env.DSH_INSTALL_DIR }) },
       stdio: { stdin: 'ignore', stdout: 'pipe', stderr: { maxBytes: this.config.maxLogBytes } },
     })
     try {
