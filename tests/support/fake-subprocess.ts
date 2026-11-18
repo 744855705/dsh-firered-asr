@@ -5,6 +5,7 @@ import type { SubprocessHandle, SubprocessOutcome, SubprocessSpawnSpec } from '@
 export interface FakeSubprocess {
   spawn(spec: SubprocessSpawnSpec): SubprocessHandle
   readonly spawned: SubprocessHandle[]
+  readonly specs: SubprocessSpawnSpec[]
 }
 
 /**
@@ -14,9 +15,12 @@ export interface FakeSubprocess {
  */
 export function createFakeSubprocess(): FakeSubprocess {
   const spawned: SubprocessHandle[] = []
+  const specs: SubprocessSpawnSpec[] = []
   return {
     spawned,
+    specs,
     spawn(spec) {
+      specs.push(spec)
       const child = spawn(spec.argv[0]!, spec.argv.slice(1), {
         cwd: spec.cwd, env: { ...process.env, ...spec.env }, stdio: ['ignore', 'pipe', 'pipe'],
       })

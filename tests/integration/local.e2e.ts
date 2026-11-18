@@ -90,8 +90,16 @@ it.skipIf(!enabled)('transcribes real FireRedASR2 sample WAVs, punctuation, the 
         if (state.phase === 'failed') ready.reject(new Error(state.message))
       })
       const start = performance.now()
+      // Reproduce the Host: it has no DSH_INSTALL_DIR, so the worker must receive the root
+      // resolved by the provider instead of rediscovering it from its own argv or cwd.
+      const savedInstallDir = process.env.DSH_INSTALL_DIR
+      delete process.env.DSH_INSTALL_DIR
       worker.prepare()
-      await ready.promise
+      try {
+        await ready.promise
+      } finally {
+        if (savedInstallDir !== undefined) process.env.DSH_INSTALL_DIR = savedInstallDir
+      }
       unsubscribe()
       const coldStartMs = performance.now() - start
 

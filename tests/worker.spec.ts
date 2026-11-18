@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
 import { afterEach, expect, it, vi } from 'vitest'
 import { Config } from '../src/config.ts'
+import { hostRoot } from '../src/host.ts'
 import { SpeechInputError } from '../src/input.ts'
 import { FireRedWorker } from '../src/recognizer.ts'
 import { inspectRuntime, prepareRuntime } from '../src/runtime.ts'
@@ -68,6 +69,18 @@ it('wakes verified caches on the first recording without preparing them again', 
   expect(phases).not.toContain('loading')
   expect(prepareRuntime).not.toHaveBeenCalled()
   expect(fake.spawned).toHaveLength(1)
+})
+
+it('hands the resolved DSH installation to the worker even when the Host environment has none', async () => {
+  const saved = process.env.DSH_INSTALL_DIR
+  delete process.env.DSH_INSTALL_DIR
+  try {
+    const { worker, fake } = await fixture()
+    await prepare(worker)
+    expect(fake.specs.at(-1)?.env?.DSH_INSTALL_DIR).toBe(hostRoot)
+  } finally {
+    if (saved !== undefined) process.env.DSH_INSTALL_DIR = saved
+  }
 })
 
 it('keeps one worker warm across recordings and joins its exit on disposal', async () => {

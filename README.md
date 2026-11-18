@@ -14,9 +14,10 @@ DeepSeek Harness（dsh）的本地离线语音识别 provider。麦克风录音�
 - **本地 CPU 推理**：无 CUDA/ROCm、无 Python、无编译依赖；使用已发布的
   `sherpa-onnx-node@1.13.8` 及其预编译 ONNX Runtime。
 - **复用运行中 DSH 的官方实现**：不把 `@deepseek-ai/dsh-experimental-speech-to-text` /
-  `@deepseek-ai/dsh-timeout` 装进 profile；启动时从 `DSH_INSTALL_DIR` 解析 DSH 自带的官方
-  voice-input bundle，动态 import 官方 `validateWave` 与 timeout helper；官方服务行与
-  FireRed provider 行保持独立，provider 行失败不会拖垮官方 SenseVoice 服务行。
+  `@deepseek-ai/dsh-timeout` 装进 profile；启动时在 DSH 安装根（`DSH_INSTALL_DIR`，否则
+  argv/cwd 回退）解析 DSH 自带的官方 voice-input bundle，动态 import 官方 `validateWave` 与
+  timeout helper，并把该安装根显式传给 worker 子进程；官方服务行与 FireRed provider 行保持
+  独立，provider 行失败不会拖垮官方 SenseVoice 服务行。
 - **按需准备**：激活只检查磁盘缓存，不下载、不加载模型；用户点“准备”才下载
   838,589,068 B 的 tar.bz2（以及 1.8 MB Silero VAD），并在解压后逐文件校验大小和
   SHA-256。
@@ -35,7 +36,8 @@ DeepSeek Harness（dsh）的本地离线语音识别 provider。麦克风录音�
 - dsh `>= 0.2.2-rc.1 <= 0.5.0`（兼容检查开启 includePrerelease，0.2.2-rc.1/0.5.0/0.5.0-rc 可用，0.5.1 不保证），Node `>= 24.9.0`。
 - 运行时不需要手动设置 `DSH_INSTALL_DIR`；0.1.4 的 host 会从 `DSH_INSTALL_DIR` →
   `process.argv[1]` → `process.cwd()` 逐级找 DSH 安装根，再从官方 voice-input bundle 解析
-  speech-to-text/timeout。只有三者都找不到 DSH 安装时才明确报错。
+  speech-to-text/timeout；解析出的安装根还会显式传给 worker 子进程（worker 的 argv/cwd 不在
+  DSH 安装内，不能自行回退）。只有三者都找不到 DSH 安装时才明确报错。
 - 官方 voice-input bundle（默认 web profile 已包含）：
   `@deepseek-ai/dsh-experimental-voice-input-bundle`。
 - CPU 推理；首次准备磁盘约 2.7 GB（ASR 压缩包/解压模型 + VAD + 64.7 MB 标点包 + 临时
@@ -211,7 +213,7 @@ rm -rf ~/.dsh/speech-to-text/firered
 ```bash
 pnpm install
 pnpm build
-pnpm test                 # 94 个单测：配置/WAV/哈希/padding/CJK/队列/取消/协议/注册/兼容/标点/fail-open
+pnpm test                 # 96 个单测：配置/WAV/哈希/padding/CJK/队列/取消/协议/注册/兼容/标点/fail-open
 # 真实模型集成（ASR 目录含 silero_vad.onnx；标点目录含 model.int8.onnx）：
 FIRERED_E2E_MODEL_DIR=/abs/model \
 FIRERED_E2E_VAD=/abs/silero_vad.onnx \

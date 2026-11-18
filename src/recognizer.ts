@@ -4,7 +4,7 @@ import { mkdir } from 'node:fs/promises'
 import type { Context } from '@deepseek-ai/cordis'
 import type { SubprocessHandle } from '@deepseek-ai/dsh-subprocess'
 import type { SpeechPreparationOptions, SpeechInput, SpeechPreparationState, SpeechPreparationStep, SpeechPreparationStepKind, Transcript } from '@deepseek-ai/dsh-experimental-speech-to-text/types'
-import { timeout } from './host.ts'
+import { hostRoot, timeout } from './host.ts'
 import { z } from 'zod'
 import type { Config } from './config.ts'
 import { SpeechDownloadError } from './download-error.ts'
@@ -260,11 +260,12 @@ export class FireRedWorker {
     this.publish({ phase: cached ? 'waking' : 'loading', step: 'load', startedAt: Date.now() })
     await mkdir(this.config.dataRoot, { recursive: true })
     const token = randomBytes(32).toString('hex')
+    // The worker is a separate Node entry point whose argv and cwd are outside the DSH
+    // installation; hand it the resolved root so its own official-helper resolution succeeds.
     const handle = this.ctx.subprocess.spawn({
       argv: [process.execPath, ...runtime.worker.endsWith('.ts') ? ['--import', import.meta.resolve('tsx/esm')] : [], runtime.worker, JSON.stringify(Object.assign({}, this.config, runtime))],
       cwd: this.config.dataRoot, graceMs: this.config.graceMs,
-      env: { DSH_SPEECH_TOKEN: token, ELECTRON_RUN_AS_NODE: '1',
-        ...(process.env.DSH_INSTALL_DIR === undefined ? {} : { DSH_INSTALL_DIR: process.env.DSH_INSTALL_DIR }) },
+      env: { DSH_SPEECH_TOKEN: token, ELECTRON_RUN_AS_NODE: '1', DSH_INSTALL_DIR: hostRoot },
       stdio: { stdin: 'ignore', stdout: 'pipe', stderr: { maxBytes: this.config.maxLogBytes } },
     })
     try {
