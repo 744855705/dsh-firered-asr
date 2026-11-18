@@ -1,3 +1,11 @@
+/**
+ * Locate the running DSH CLI from the environment, the process entry, or the working directory.
+ * The Host process does not necessarily export `DSH_INSTALL_DIR`; the loader entry and cwd are the
+ * fallbacks that keep the provider row loadable.
+ * @param starts - explicit roots first; each is walked upward to a DSH CLI/checkout.
+ * @returns the `@deepseek-ai/dsh` CLI directory.
+ */
+export declare function findDshCli(starts?: readonly (string | undefined)[]): string;
 declare const timeout: typeof import("@deepseek-ai/dsh-timeout");
 /** Official canonical WAV validator from the running DSH installation. */
 export declare const validateWave: typeof import("@deepseek-ai/dsh-experimental-speech-to-text/wave").validateWave;

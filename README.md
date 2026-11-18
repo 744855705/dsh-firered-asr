@@ -33,8 +33,9 @@ DeepSeek Harness（dsh）的本地离线语音识别 provider。麦克风录音�
 ## 环境要求
 
 - dsh `>= 0.2.2-rc.1 <= 0.5.0`（兼容检查开启 includePrerelease，0.2.2-rc.1/0.5.0/0.5.0-rc 可用，0.5.1 不保证），Node `>= 24.9.0`。
-- 运行时必须存在 `DSH_INSTALL_DIR`（DSH 进程自带）；FireRed 从运行中的 DSH 安装解析官方
-  speech-to-text/timeout 实现，不把官方包装进 profile。
+- 运行时不需要手动设置 `DSH_INSTALL_DIR`；0.1.4 的 host 会从 `DSH_INSTALL_DIR` →
+  `process.argv[1]` → `process.cwd()` 逐级找 DSH 安装根，再从官方 voice-input bundle 解析
+  speech-to-text/timeout。只有三者都找不到 DSH 安装时才明确报错。
 - 官方 voice-input bundle（默认 web profile 已包含）：
   `@deepseek-ai/dsh-experimental-voice-input-bundle`。
 - CPU 推理；首次准备磁盘约 2.7 GB（ASR 压缩包/解压模型 + VAD + 64.7 MB 标点包 + 临时
@@ -46,7 +47,7 @@ DeepSeek Harness（dsh）的本地离线语音识别 provider。麦克风录音�
 ### 从 tarball（推荐先验证构建产物）
 
 ```bash
-dsh plugin --profile web add ./dsh-firered-asr-0.1.3.tgz
+dsh plugin --profile web add ./dsh-firered-asr-0.1.4.tgz
 ```
 
 ### 从 GitHub（公开仓库）
@@ -265,9 +266,9 @@ FIRERED_MODEL_DIR=/abs/model FIRERED_PUNCT=0 pnpm bench
   并重跑校验，不在本包支持范围。
 - **标点离线**：`punctuationModelDirectory` 指向已解压标点目录；不配且无缓存时会尝试
   下载。标点包下载失败不会阻塞 ASR。
-- **宿主官方 helper**：`DSH_INSTALL_DIR` 缺失，或运行中 DSH 的官方 `validateWave`/timeout
-  API 发生破坏性变化时，FireRed provider 行会明确失败；官方 SenseVoice 服务行独立，不会
-  因此整体禁用。
+- **宿主官方 helper**：`DSH_INSTALL_DIR`、`process.argv[1]`、`cwd` 都不在 DSH 安装路径，或
+  运行中 DSH 的官方 `validateWave`/timeout API 发生破坏性变化时，FireRed provider 行会明确
+  失败；官方 SenseVoice 服务行独立，不会因此整体禁用。
 
 ## 许可
 
