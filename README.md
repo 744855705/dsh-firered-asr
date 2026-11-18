@@ -20,14 +20,15 @@ DeepSeek Harness（dsh）的本地离线语音识别 provider。麦克风录音�
   前回填 0.3s、终点向后补 0.25s，且起点不越过上一段结束点、终点不超过总长；段间按
   CJK/英文规则拼接，而不是统一 `join(' ')`。
 - **标点恢复（默认开）**：worker 内与 ASR 一起加载 64.7 MB 的中英 CT-Transformer
-  标点模型，对**最终拼接后的整段文本**只调用一次 `addPunct`；模型缺失、加载失败或
-  推理失败时 fail-open，返回未加标点的原文。`punctuation=false` 时完全不加载标点模型。
+  标点模型，对**最终拼接后的整段文本**只调用一次 `addPunct`。标点模型缺失时激活会标记为
+  **待准备**，官方“准备”按钮出现并下载标点包；准备/加载/推理失败时 fail-open 返回原文。
+  `punctuation=false` 时完全不加载标点模型。
 - **受管子进程**：一次只跑一个任务；回环 HTTP + 随机 bearer token；取消时终止并等待
   进程退出；空闲 5 分钟停止 worker，模型缓存保留，下次录音重新唤醒。
 
 ## 环境要求
 
-- dsh `>= 0.2.2-rc.3 < 0.3.0`，Node `>= 24.9.0`。
+- dsh `>= 0.2.2-rc.3 <= 0.5.0`（兼容检查开启 includePrerelease，0.5.0/0.5.0-rc 可用，0.5.1 不保证），Node `>= 24.9.0`。
 - 官方 voice-input bundle（默认 web profile 已包含）：
   `@deepseek-ai/dsh-experimental-voice-input-bundle`。
 - CPU 推理；首次准备磁盘约 2.7 GB（ASR 压缩包/解压模型 + VAD + 64.7 MB 标点包 + 临时
@@ -39,7 +40,7 @@ DeepSeek Harness（dsh）的本地离线语音识别 provider。麦克风录音�
 ### 从 tarball（推荐先验证构建产物）
 
 ```bash
-dsh plugin --profile web add ./dsh-firered-asr-0.1.1.tgz
+dsh plugin --profile web add ./dsh-firered-asr-0.1.2.tgz
 ```
 
 ### 从 GitHub（公开仓库）
@@ -58,7 +59,7 @@ dsh plugin --profile web add /absolute/path/to/packages/experimental/speech-to-t
 
 1. 打开 **设置 → 语音 → 识别器**，选择 **FireRedASR2-AED (int8)**。
 2. 点 **准备**：下载 ASR 模型 + VAD + 标点模型 → 解压 → 校验 → 加载 worker。下载进度
-   显示真实字节；解压/校验/加载显示等待时间。标点模型不可用不会阻塞 ASR（fail-open）。
+   显示真实字节；解压/校验/加载显示等待时间。准备阶段标点不可用不会阻塞 ASR（ready 后无标点）。
 3. 回到输入框，点麦克风录音；停止后文本进入草稿，可编辑后发送。
 
 模型缓存默认在 `~/.dsh/speech-to-text/firered`（bundle patch 里的 `dataRoot`）。
@@ -95,7 +96,7 @@ rm -rf ~/.dsh/speech-to-text/firered
 | `modelUrl` | GitHub release 的固定 URL | 覆盖下载地址；**必须同时提供 `modelSha256`**，且只接受 HTTPS、无凭据。 |
 | `modelSha256` | 固定值（默认 URL 时） | 覆盖时必填；同时会决定下载后校验的哈希。 |
 | `punctuation` | `true` | 是否加载中英标点模型；`false` 时完全不构造 `OfflinePunctuation`。 |
-| `punctuationModelDirectory` | — | 已解压标点目录（含 `model.int8.onnx`）；离线使用，跳过下载/解压，仍校验大小与 SHA-256。目录缺失时 fail-open（返回无标点原文）。 |
+| `punctuationModelDirectory` | — | 已解压标点目录（含 `model.int8.onnx`）；离线使用，跳过下载/解压，仍校验大小与 SHA-256。目录缺失时激活待准备；prepare 失败则 ready 无标点原文。 |
 | `punctuationModelUrl` | GitHub release 的固定 URL | 标点包下载地址；覆盖时**必须同时提供 `punctuationModelSha256`**，只接受 HTTPS、无凭据。 |
 | `punctuationModelSha256` | 固定值（默认 URL 时） | 覆盖标点包时必填；决定下载后校验的哈希。 |
 | `threads` | 8 | CPU intra-op 线程数（ASR 与标点共用）。 |
@@ -137,7 +138,7 @@ rm -rf ~/.dsh/speech-to-text/firered
 3. 标点模型（可选但默认开）：下载
    `sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12-int8.tar.bz2`
    （64,717,756 B）并解压；把解压目录配给 `punctuationModelDirectory`（目录含
-   `model.int8.onnx`）。不配或目录缺失时仍可转写，只是返回无标点原文。
+   `model.int8.onnx`）。不配或目录缺失时激活会提示准备；准备失败则 ready 但无标点原文。
 4. 选择任一种 ASR 离线配置：
    - `archivePath`：插件解压到 `dataRoot/models/...`，逐文件校验；VAD 需按上一步预置。
    - `modelDirectory`：直接使用已解压目录（含 `silero_vad.onnx`），完全不下载、不解压。
@@ -188,11 +189,15 @@ rm -rf ~/.dsh/speech-to-text/firered
   `new sherpa.OfflinePunctuation({ model: { ctTransformer, numThreads, provider: 'cpu', debug: 0 } })`。
 - 无论直接解码还是 VAD 分段，都先得到**最终拼接文本**，再只调用一次 `addPunct(text)`；
   不逐段调用，避免句间上下文被切断。
-- 标点模型缺失（未准备/删缓存/离线目录不存在）、构造失败、`addPunct` 抛错或返回空串时，
-  一律 fail-open：返回未加标点的原文，只写 warn，绝不丢转写。
-- `punctuation=false` 时完全不加载标点模型，内存/启动开销为零；标点模型准备并入现有
-  `model` 步骤，不新增 `SpeechPreparationStepKind`。
-- 标点包下载失败也不阻塞 ASR：准备仍可进入 ready，只是本次 worker 不加载标点。
+- 标点模型缺失（未准备/删缓存/离线目录不存在）时，激活 inspect 返回 `unprepared`，官方
+  准备卡片出现“准备”按钮；点准备才下载/解压标点包，并进入现有 `model` 步骤。
+- 准备阶段标点下载/解压失败、构造失败、`addPunct` 抛错或返回空串时，一律 fail-open：
+  进入/保持 ready 并返回未加标点原文，只写 warn，绝不丢转写；已加载 worker 的标点文件
+  被删也返回原文。
+- `punctuation=false` 时完全不加载标点模型，内存/启动开销为零；不新增
+  `SpeechPreparationStepKind`。
+- 标点包下载失败不阻塞 ASR：准备仍可进入 ready，只是本次 worker 不加载标点；重启/重载后
+  会再次显示“准备”。
 
 ## 开发、测试与性能
 
@@ -239,8 +244,9 @@ FIRERED_MODEL_DIR=/abs/model FIRERED_PUNCT=0 pnpm bench
 - **无流式**：官方 `SpeechProvider` 只接受完整录音；本插件不做实时字幕。
 - **无热词**：AED 路径不支持 hotwords；不要设置 `hotwords`。
 - **AED 有效窗口**：单段解码不超过约 30s；超长录音靠 VAD 分段 + padding。
-- **标点模型可选**：默认下载 64.7 MB；缺包、删缓存、离线目录缺失、加载失败或 `addPunct`
-  失败时 fail-open，返回无标点原文。想要零标点开销时设 `punctuation: false`。
+- **标点模型可选**：默认下载 64.7 MB；缺包、删缓存、离线目录缺失时激活显示待准备；准备
+  失败、加载失败或 `addPunct` 失败时 fail-open 返回无标点原文；已加载 worker 的标点文件
+  被删仍可转写。想要零标点开销时设 `punctuation: false`。
 - **标点内存**：标点模型实测约 +33 MB RSS（保守 <150 MB）；内存紧张时关闭标点。
 - **首次加载慢/内存高**：int8 权重约 1.23 GB，ONNX Runtime 加载后 RSS 约 1.8 GB（10s
   片段）/2.4 GB（30s 批量 bench），长音频会继续增长；`expectedMemoryBytes` 只是规划估计。

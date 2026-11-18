@@ -9,7 +9,7 @@ import { expect, it, vi } from 'vitest'
 import { Config } from '../../src/config.ts'
 import { createTranscriber } from '../../src/inference.ts'
 import { FireRedWorker } from '../../src/recognizer.ts'
-import { inspectRuntime } from '../../src/runtime.ts'
+import { inspectRuntime, prepareRuntime } from '../../src/runtime.ts'
 import { createFakeSubprocess } from '../support/fake-subprocess.ts'
 import { concatWaves } from '../support/wav.ts'
 
@@ -68,9 +68,10 @@ it.skipIf(!enabled)('transcribes real FireRedASR2 sample WAVs, punctuation, the 
     // Explicitly missing punctuation directory: ASR must still be ready and return raw text.
     const missingConfig = Config({ dataRoot, modelDirectory: modelDir!,
       punctuationModelDirectory: join(dataRoot, 'missing-punct'), threads: 8 })
-    const missingPaths = await inspectRuntime(missingConfig, signal())
-    expect(missingPaths).toBeDefined()
-    expect(missingPaths?.punctuationModel).toBeUndefined()
+    // Inspection now requires preparation, but an explicit prepare still fails open to ASR-only.
+    expect(await inspectRuntime(missingConfig, signal())).toBeUndefined()
+    const missingPaths = await prepareRuntime(missingConfig, signal())
+    expect(missingPaths.punctuationModel).toBeUndefined()
     const missingTranscriber = createTranscriber(Object.assign({}, missingConfig, missingPaths))
     const raw = missingTranscriber(first, 'auto')
     expect(raw.text.length).toBeGreaterThan(0)

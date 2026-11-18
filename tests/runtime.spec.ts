@@ -272,7 +272,7 @@ describe('downloadAsset', () => {
 })
 
 describe('punctuation runtime', () => {
-  it('inspects punctuation as optional and keeps ASR ready when it is absent', async () => {
+  it('marks an enabled but missing punctuation model as needing preparation', async () => {
     const f = await fixture()
     await writeAsr(f)
     const puncDir = join(f.root, 'punct')
@@ -282,13 +282,12 @@ describe('punctuation runtime', () => {
     const ready = await inspectRuntime(config, signal(), lock)
     expect(ready?.punctuationModel).toBe(join(puncDir, 'model.int8.onnx'))
     await rm(join(puncDir, 'model.int8.onnx'))
-    const missing = await inspectRuntime(config, signal(), lock)
-    expect(missing).toBeDefined()
-    expect(missing?.punctuationModel).toBeUndefined()
+    expect(await inspectRuntime(config, signal(), lock)).toBeUndefined()
     await writePunctuation(puncDir)
     const disabled = await inspectRuntime(Config({ dataRoot: f.dataRoot, modelDirectory: f.modelDir,
       punctuationModelDirectory: puncDir, punctuation: false }), signal(), lock)
     expect(disabled?.punctuationModel).toBeUndefined()
+    expect(disabled).toBeDefined()
   })
 
   it('fails open when an explicit punctuation directory is missing', async () => {

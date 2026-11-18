@@ -96,10 +96,15 @@ export declare function downloadAsset(asset: DownloadAsset, destination: string,
 export declare function extractArchive(archive: string, destination: string, lock: RuntimeLock, graceMs: number, signal: AbortSignal): Promise<void>;
 /**
  * Inspect existing models without downloading, writing files, or starting the worker.
+ *
+ * When punctuation is enabled and the pinned lock includes a punctuation model, that model is
+ * required for readiness too: a missing model marks the provider `unprepared`, which is the only
+ * state where the official preparation card shows its Prepare button. An already loaded worker
+ * keeps its runtime and remains fail-open if the file later disappears.
  * @param config - model paths and inference settings.
  * @param signal - provider cancellation or inspection deadline.
  * @param lock - pinned asset identity, injectable for tests.
- * @returns cached paths when all files exist and match their pinned size and hash; otherwise undefined.
+ * @returns cached paths when all required files exist and match their pinned size and hash; otherwise undefined.
  */
 export declare function inspectRuntime(config: Config, signal: AbortSignal, lock?: RuntimeLock): Promise<RuntimePaths | undefined>;
 /**

@@ -1,6 +1,6 @@
 {
   "name": "dsh-firered-asr",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Local FireRedASR2-AED int8 speech-to-text provider for DeepSeek Harness, with padded Silero VAD segmentation and CT-Transformer punctuation",
   "type": "module",
   "main": "lib/index.js",
@@ -37,7 +37,7 @@
   "license": "MIT",
   "engines": {
     "node": ">=24.9.0",
-    "dsh": ">=0.2.2-rc.3 <0.3.0"
+    "dsh": ">=0.2.2-rc.3 <=0.5.0"
   },
   "dsh": {
     "bundle": {

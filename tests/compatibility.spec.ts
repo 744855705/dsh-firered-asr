@@ -13,9 +13,12 @@ const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.
 const patch = readFileSync(new URL('../cordis.patch.yml', import.meta.url), 'utf8')
 const runtimeFiles = readdirSync(fileURLToPath(new URL('../runtime', import.meta.url)))
 
-it('passes the running dsh 0.2.2-rc.3 compatibility precheck', () => {
+it('passes the running dsh 0.2.2-rc.3 compatibility precheck and caps at 0.5.0', () => {
   expect(manifest.engines.dsh).toBeTypeOf('string')
   expect(semver.satisfies('0.2.2-rc.3', manifest.engines.dsh, { includePrerelease: true })).toBe(true)
+  expect(semver.satisfies('0.5.0', manifest.engines.dsh, { includePrerelease: true })).toBe(true)
+  expect(semver.satisfies('0.5.0-rc.1', manifest.engines.dsh, { includePrerelease: true })).toBe(true)
+  expect(semver.satisfies('0.5.1', manifest.engines.dsh, { includePrerelease: true })).toBe(false)
   expect(manifest.dependencies?.['@deepseek-ai/dsh']).toBeUndefined()
   expect(manifest.dsh.bundle.patch).toBe('./cordis.patch.yml')
 })
