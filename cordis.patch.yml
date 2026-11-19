@@ -6,9 +6,10 @@
 # the default web profile; adding a second copy would duplicate them.
 #
 # The provider id `firered-local` is registered by this package. Switch to it
-# in Settings -> Voice -> Recognizer; the row's dataRoot is the model cache.
+# in Settings -> Voice -> Recognizer. dataRoot defaults in code to the shared
+# harness home (`$DSH_HOME` when non-blank, otherwise `~/.dsh`) +
+# `speech-to-text/firered`, so every profile on the machine uses one model
+# cache; override it here only when a different absolute root is required.
 - insert:
     - id: firered-asr
       name: 'dsh-firered-asr'
-      config:
-        dataRoot: !!js dshHomePath('speech-to-text', 'firered')

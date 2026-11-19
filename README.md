@@ -34,7 +34,7 @@ DeepSeek Harness（dsh）的本地离线语音识别 provider。麦克风录音�
 ## 环境要求
 
 - dsh `>= 0.2.2-rc.1 <= 0.5.0`（兼容检查开启 includePrerelease，0.2.2-rc.1/0.5.0/0.5.0-rc 可用，0.5.1 不保证），Node `>= 24.9.0`。
-- 运行时不需要手动设置 `DSH_INSTALL_DIR`；0.1.4 的 host 会从 `DSH_INSTALL_DIR` →
+- 运行时不需要手动设置 `DSH_INSTALL_DIR`；0.1.4 起的 host 会从 `DSH_INSTALL_DIR` →
   `process.argv[1]` → `process.cwd()` 逐级找 DSH 安装根，再从官方 voice-input bundle 解析
   speech-to-text/timeout；解析出的安装根还会显式传给 worker 子进程（worker 的 argv/cwd 不在
   DSH 安装内，不能自行回退）。只有三者都找不到 DSH 安装时才明确报错。
@@ -49,7 +49,7 @@ DeepSeek Harness（dsh）的本地离线语音识别 provider。麦克风录音�
 ### 从 tarball（推荐先验证构建产物）
 
 ```bash
-dsh plugin --profile web add ./dsh-firered-asr-0.1.4.tgz
+dsh plugin --profile web add ./dsh-firered-asr-0.1.5.tgz
 ```
 
 ### 从 GitHub（公开仓库）
@@ -71,7 +71,10 @@ dsh plugin --profile web add /absolute/path/to/packages/experimental/speech-to-t
    显示真实字节；解压/校验/加载显示等待时间。准备阶段标点不可用不会阻塞 ASR（ready 后无标点）。
 3. 回到输入框，点麦克风录音；停止后文本进入草稿，可编辑后发送。
 
-模型缓存默认在 `~/.dsh/speech-to-text/firered`（bundle patch 里的 `dataRoot`）。
+模型缓存默认在 `$DSH_HOME`（非空）否则 `~/.dsh` 下的 `speech-to-text/firered`。这个默认值
+由代码解析（见 `src/config.ts` 的 `defaultDataRoot`），bundle patch 不再用 `!!js`；**同一台
+机器上的所有 profile 共用这一份模型缓存**，桌面端和 CLI 行为一致。需要分开缓存时，在
+profile 的 `cordis.patch.yml` 里显式覆盖 `dataRoot`。
 
 ## 卸载 / 回滚
 
@@ -99,7 +102,7 @@ rm -rf ~/.dsh/speech-to-text/firered
 | 字段 | 默认值 | 说明 |
 |---|---|---|
 | `providerId` | `firered-local` | 注册 id；UI 用它切换。 |
-| `dataRoot` | bundle patch 设为 `dshHomePath('speech-to-text','firered')` | 模型缓存、下载缓存、worker cwd 的绝对根目录。 |
+| `dataRoot` | `$DSH_HOME`（非空）否则 `~/.dsh` + `speech-to-text/firered`，代码解析 | 模型缓存、下载缓存、worker cwd 的绝对根目录；同机所有 profile 共用一份。 |
 | `modelDirectory` | — | 已解压目录（含 `encoder.int8.onnx`、`decoder.int8.onnx`、`tokens.txt`，可含 `silero_vad.onnx`）；跳过下载/解压，仍校验大小与 SHA-256。与 `archivePath` 互斥。 |
 | `archivePath` | — | 离线 tar.bz2 绝对路径；跳过下载，仍解压并逐文件校验。与 `modelDirectory` 互斥。 |
 | `modelUrl` | GitHub release 的固定 URL | 覆盖下载地址；**必须同时提供 `modelSha256`**，且只接受 HTTPS、无凭据。 |
@@ -213,7 +216,7 @@ rm -rf ~/.dsh/speech-to-text/firered
 ```bash
 pnpm install
 pnpm build
-pnpm test                 # 96 个单测：配置/WAV/哈希/padding/CJK/队列/取消/协议/注册/兼容/标点/fail-open
+pnpm test                 # 98 个单测：配置/WAV/哈希/padding/CJK/队列/取消/协议/注册/兼容/标点/fail-open
 # 真实模型集成（ASR 目录含 silero_vad.onnx；标点目录含 model.int8.onnx）：
 FIRERED_E2E_MODEL_DIR=/abs/model \
 FIRERED_E2E_VAD=/abs/silero_vad.onnx \

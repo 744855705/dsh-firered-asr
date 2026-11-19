@@ -1,6 +1,8 @@
 /** Configuration defaults and deployment-time rejection without touching native code. */
+import { readFileSync } from 'node:fs'
+import { isAbsolute, join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { Config, DEFAULT_MODEL_URL, DEFAULT_PUNCTUATION_MODEL_URL, validateConfig } from '../src/config.ts'
+import { Config, DEFAULT_MODEL_URL, DEFAULT_PUNCTUATION_MODEL_URL, defaultDataRoot, validateConfig } from '../src/config.ts'
 
 const base = { dataRoot: '/cache/firered' }
 
@@ -22,8 +24,24 @@ describe('Config', () => {
     expect(Config(base).punctuationModelSha256).toBeUndefined()
   })
 
-  it('requires dataRoot', () => {
-    expect(() => Config({})).toThrow()
+  it('defaults dataRoot to the shared harness-home cache', () => {
+    expect(Config({}).dataRoot).toBe(defaultDataRoot())
+    expect(isAbsolute(Config({}).dataRoot)).toBe(true)
+    expect(Config({ dataRoot: '/custom/firered' }).dataRoot).toBe('/custom/firered')
+  })
+
+  it('resolves the shared cache from DSH_HOME, blank fallback, and tilde', () => {
+    expect(defaultDataRoot({ DSH_HOME: '/srv/dsh' }, '/home/u')).toBe('/srv/dsh/speech-to-text/firered')
+    expect(defaultDataRoot({ DSH_HOME: '   ' }, '/home/u')).toBe(join('/home/u', '.dsh', 'speech-to-text', 'firered'))
+    expect(defaultDataRoot({ DSH_HOME: '~/custom' }, '/home/u')).toBe(join('/home/u', 'custom', 'speech-to-text', 'firered'))
+    expect(defaultDataRoot({}, '/home/u')).toBe(join('/home/u', '.dsh', 'speech-to-text', 'firered'))
+    expect(defaultDataRoot({ DSH_HOME: '/' }, '/home/u')).toBe('/speech-to-text/firered')
+  })
+
+  it('bundle patch no longer evaluates a profile-layer JS expression', () => {
+    const patch = readFileSync(new URL('../cordis.patch.yml', import.meta.url), 'utf8')
+    expect(patch).not.toContain('!!js')
+    expect(patch).toContain('firered-asr')
   })
 
   it.each([

@@ -1,4 +1,14 @@
 import z from '@deepseek-ai/schemastery';
+/**
+ * Default cache root shared by every profile on the machine: `$DSH_HOME` when
+ * non-blank, otherwise `~/.dsh`, then `speech-to-text/firered`. This mirrors the
+ * official `resolveDshHome` precedence without adding an official runtime
+ * dependency, and keeps the path independent of the profile directory.
+ * @param env - environment mapping to read `DSH_HOME` from.
+ * @param home - operating-system home used when `DSH_HOME` is absent or blank.
+ * @returns the normalized absolute cache root.
+ */
+export declare function defaultDataRoot(env?: Record<string, string | undefined>, home?: string): string;
 /** Release-pinned archive URL; an override must also provide `modelSha256`. */
 export declare const DEFAULT_MODEL_URL = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-fire-red-asr2-zh_en-int8-2026-02-26.tar.bz2";
 /** Release-pinned CT-Transformer punctuation archive URL; an override must also provide `punctuationModelSha256`. */
