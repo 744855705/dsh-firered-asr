@@ -57,7 +57,7 @@ export interface Config {
     prepareTimeoutMs: number;
     /** Deadline for one inference after the worker is ready. */
     inferenceTimeoutMs: number;
-    /** Idle period before stopping the worker; zero keeps it warm. */
+    /** Idle period before stopping the worker (default two hours); zero keeps it warm. */
     idleTimeoutMs: number;
     /** Maximum accepted running and waiting transcriptions. */
     maxPending: number;

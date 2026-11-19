@@ -29,7 +29,7 @@ DeepSeek Harness（dsh）的本地离线语音识别 provider。麦克风录音�
   **待准备**，官方“准备”按钮出现并下载标点包；准备/加载/推理失败时 fail-open 返回原文。
   `punctuation=false` 时完全不加载标点模型。
 - **受管子进程**：一次只跑一个任务；回环 HTTP + 随机 bearer token；取消时终止并等待
-  进程退出；空闲 5 分钟停止 worker，模型缓存保留，下次录音重新唤醒。
+  进程退出；空闲 2 小时停止 worker，模型缓存保留，下次录音重新唤醒。
 
 ## 环境要求
 
@@ -123,7 +123,7 @@ rm -rf ~/.dsh/speech-to-text/firered
 | `maxAudioBytes` | 4194304（≈131s） | 解码 WAV 字节上限；超限在 worker 前拒绝。 |
 | `prepareTimeoutMs` | 3600000 | 下载 + 解压 + 冷加载的预算。 |
 | `inferenceTimeoutMs` | 600000 | 单次推理预算（CPU 慢，给足）。 |
-| `idleTimeoutMs` | 300000 | 空闲后停止 worker；0 表示保持常驻。 |
+| `idleTimeoutMs` | 7200000（2 小时） | 空闲后停止 worker；默认保留 2 小时以覆盖长任务/逐轮对话，0 表示保持常驻。 |
 | `maxPending` | 4 | 运行 + 排队任务上限。 |
 | `graceMs` | 1000 | 终止 tar/worker 的宽限。 |
 | `maxLogBytes` | 65536 | worker/tar stderr 保留上限。 |

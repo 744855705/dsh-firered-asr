@@ -78,7 +78,7 @@ export interface Config {
   prepareTimeoutMs: number
   /** Deadline for one inference after the worker is ready. */
   inferenceTimeoutMs: number
-  /** Idle period before stopping the worker; zero keeps it warm. */
+  /** Idle period before stopping the worker (default two hours); zero keeps it warm. */
   idleTimeoutMs: number
   /** Maximum accepted running and waiting transcriptions. */
   maxPending: number
@@ -115,7 +115,7 @@ export const Config: z<Partial<Config>, Config> = z.object({
   maxAudioBytes: z.natural().min(46).default(4 * 1024 * 1024),
   prepareTimeoutMs: z.natural().min(1).max(MAX_TIMER_DELAY_MS).default(3_600_000),
   inferenceTimeoutMs: z.natural().min(1).max(MAX_TIMER_DELAY_MS).default(600_000),
-  idleTimeoutMs: z.natural().max(MAX_TIMER_DELAY_MS).default(300_000),
+  idleTimeoutMs: z.natural().max(MAX_TIMER_DELAY_MS).default(7_200_000),
   maxPending: z.natural().min(1).default(4),
   graceMs: z.natural().min(1).max(MAX_TIMER_DELAY_MS).default(1000),
   maxLogBytes: z.natural().min(1).default(64 * 1024),

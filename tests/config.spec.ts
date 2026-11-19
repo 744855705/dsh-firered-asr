@@ -14,9 +14,11 @@ describe('Config', () => {
       directDecodeSeconds: 30, segmentSeconds: 30, vadThreshold: 0.5, minSpeechSeconds: 0.1,
       minSilenceSeconds: 0.8, vadOnsetPaddingSeconds: 0.3, vadTailPaddingSeconds: 0.25,
       maxAudioBytes: 4 * 1024 * 1024, prepareTimeoutMs: 3_600_000, inferenceTimeoutMs: 600_000,
-      idleTimeoutMs: 300_000, maxPending: 4, graceMs: 1000, maxLogBytes: 64 * 1024,
+      idleTimeoutMs: 7_200_000, maxPending: 4, graceMs: 1000, maxLogBytes: 64 * 1024,
       maxResponseBytes: 128 * 1024, progressIntervalMs: 100,
     })
+    expect(Config({ ...base, idleTimeoutMs: 0 }).idleTimeoutMs).toBe(0)
+    expect(Config({ ...base, idleTimeoutMs: 60_000 }).idleTimeoutMs).toBe(60_000)
     expect(Config(base).modelDirectory).toBeUndefined()
     expect(Config(base).archivePath).toBeUndefined()
     expect(Config(base).modelSha256).toBeUndefined()
