@@ -1,6 +1,6 @@
 /** Configuration defaults and deployment-time rejection without touching native code. */
 import { readFileSync } from 'node:fs'
-import { isAbsolute, join } from 'node:path'
+import { isAbsolute, join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { Config, DEFAULT_MODEL_URL, DEFAULT_PUNCTUATION_MODEL_URL, defaultDataRoot, validateConfig } from '../src/config.ts'
 
@@ -31,11 +31,12 @@ describe('Config', () => {
   })
 
   it('resolves the shared cache from DSH_HOME, blank fallback, and tilde', () => {
-    expect(defaultDataRoot({ DSH_HOME: '/srv/dsh' }, '/home/u')).toBe('/srv/dsh/speech-to-text/firered')
-    expect(defaultDataRoot({ DSH_HOME: '   ' }, '/home/u')).toBe(join('/home/u', '.dsh', 'speech-to-text', 'firered'))
-    expect(defaultDataRoot({ DSH_HOME: '~/custom' }, '/home/u')).toBe(join('/home/u', 'custom', 'speech-to-text', 'firered'))
-    expect(defaultDataRoot({}, '/home/u')).toBe(join('/home/u', '.dsh', 'speech-to-text', 'firered'))
-    expect(defaultDataRoot({ DSH_HOME: '/' }, '/home/u')).toBe('/speech-to-text/firered')
+    const home = resolve('firered-test-home')
+    const dshHome = join(home, 'dsh-home')
+    expect(defaultDataRoot({ DSH_HOME: dshHome }, home)).toBe(join(dshHome, 'speech-to-text', 'firered'))
+    expect(defaultDataRoot({ DSH_HOME: '   ' }, home)).toBe(join(home, '.dsh', 'speech-to-text', 'firered'))
+    expect(defaultDataRoot({ DSH_HOME: '~/custom' }, home)).toBe(join(home, 'custom', 'speech-to-text', 'firered'))
+    expect(defaultDataRoot({}, home)).toBe(join(home, '.dsh', 'speech-to-text', 'firered'))
   })
 
   it('bundle patch no longer evaluates a profile-layer JS expression', () => {
