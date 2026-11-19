@@ -34,10 +34,11 @@ DeepSeek Harness（dsh）的本地离线语音识别 provider。麦克风录音�
 ## 环境要求
 
 - dsh `>= 0.2.2-rc.1 <= 0.5.0`（兼容检查开启 includePrerelease，0.2.2-rc.1/0.5.0/0.5.0-rc 可用，0.5.1 不保证），Node `>= 24.9.0`。
-- 运行时不需要手动设置 `DSH_INSTALL_DIR`；0.1.4 起的 host 会从 `DSH_INSTALL_DIR` →
-  `process.argv[1]` → `process.cwd()` 逐级找 DSH 安装根，再从官方 voice-input bundle 解析
-  speech-to-text/timeout；解析出的安装根还会显式传给 worker 子进程（worker 的 argv/cwd 不在
-  DSH 安装内，不能自行回退）。只有三者都找不到 DSH 安装时才明确报错。
+- 运行时不需要手动设置 `DSH_INSTALL_DIR`；host 先按 CLI/源码布局从 `DSH_INSTALL_DIR` →
+  `process.argv[1]` → `process.cwd()` 找 DSH 安装根（与 0.1.5 一致，web 命中即返回）；全部
+  落空后再按 Electron `process.resourcesPath` / exeDir 下的 `app.asar/dsh`、`app/dsh` 布局，
+  以“能解析官方 voice-input bundle”为判据接受桌面运行时目录。解析出的根会显式传给 worker
+  子进程；真正找不到任何能解析官方 helper 的目录时才明确报错。
 - 官方 voice-input bundle（默认 web profile 已包含）：
   `@deepseek-ai/dsh-experimental-voice-input-bundle`。
 - CPU 推理；首次准备磁盘约 2.7 GB（ASR 压缩包/解压模型 + VAD + 64.7 MB 标点包 + 临时
@@ -49,7 +50,7 @@ DeepSeek Harness（dsh）的本地离线语音识别 provider。麦克风录音�
 ### 从 tarball（推荐先验证构建产物）
 
 ```bash
-dsh plugin --profile web add ./dsh-firered-asr-0.1.5.tgz
+dsh plugin --profile web add ./dsh-firered-asr-0.1.6.tgz
 ```
 
 ### 从 GitHub（公开仓库）
@@ -216,7 +217,7 @@ rm -rf ~/.dsh/speech-to-text/firered
 ```bash
 pnpm install
 pnpm build
-pnpm test                 # 98 个单测：配置/WAV/哈希/padding/CJK/队列/取消/协议/注册/兼容/标点/fail-open
+pnpm test                 # 101 个单测：配置/WAV/哈希/padding/CJK/队列/取消/协议/注册/兼容/标点/fail-open
 # 真实模型集成（ASR 目录含 silero_vad.onnx；标点目录含 model.int8.onnx）：
 FIRERED_E2E_MODEL_DIR=/abs/model \
 FIRERED_E2E_VAD=/abs/silero_vad.onnx \
