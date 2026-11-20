@@ -161,6 +161,8 @@ rm -rf ~/.dsh/speech-to-text/firered
   - `mode: "hard"`：额外拒绝其他 provider 的 `configure`，并把 `resolve` 强制为 FireRed；
     更彻底，但手机客户端可能收到失败提示。
   - `providerId` 可省略；显式给出时必须等于 `firered-local`，否则告警并按未锁定处理。
+  - 0.1.7 的 soft 使用官方 `speechToText.follow()` 订阅 catalog；`loader/volatile-update`
+    只发给被更新 fiber 自己的 context，跨 fiber 收不到，不能作为 soft 锁的触发。
 
 - 创建/删除锁文件后需要**重载/重启 DSH** 才生效；插件在启动时读取一次。
 - 插件**只读**锁文件：不创建、不写、不 `watch`；缺失、损坏、`EACCES`/`EPERM`/`EBUSY` 等

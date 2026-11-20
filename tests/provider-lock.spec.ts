@@ -38,37 +38,45 @@ interface FakeRuntime {
     snapshot(): { selection: { providerId: string } }
     configure(patch: SpeechSelectionPatch): Promise<void>
     resolve(request: SpeechRequest): SpeechSpec
+    follow(caller: AbortSignal): AsyncIterable<{ selection: { providerId: string } }>
   }
   readonly state: FakeState
   readonly configure: ReturnType<typeof vi.fn>
   readonly resolve: ReturnType<typeof vi.fn>
-  readonly emit: () => void
+  readonly wake: () => void
 }
 
 function fakeRuntime(initial = 'firered-local', failConfigure = false): FakeRuntime {
-  const listeners = new Set<() => void>()
+  const waiters: Array<() => void> = []
   const state: FakeState = { selection: initial }
   const configure = vi.fn(async (patch: SpeechSelectionPatch): Promise<void> => {
     if (failConfigure) throw new Error('configure failed')
     if (patch.providerId !== undefined) state.selection = patch.providerId
   })
   const resolve = vi.fn((request: SpeechRequest): SpeechSpec => ({ ...request, provider: {} } as unknown as SpeechSpec))
+  const follow = async function* (signal: AbortSignal): AsyncIterable<{ selection: { providerId: string } }> {
+    while (!signal.aborted) {
+      yield { selection: { providerId: state.selection } }
+      await new Promise<void>((done) => {
+        const onAbort = (): void => { done() }
+        waiters.push(done)
+        signal.addEventListener('abort', onAbort, { once: true })
+      })
+    }
+  }
   const speech = {
     snapshot: (): { selection: { providerId: string } } => ({ selection: { providerId: state.selection } }),
     configure,
     resolve,
+    follow,
   }
   const runtime: ProviderLockRuntime = {
     speechToText: speech,
     logger: { warn: vi.fn() },
-    onChange: (listener) => {
-      listeners.add(listener)
-      return () => { listeners.delete(listener) }
-    },
   }
   return {
     runtime, speech, state, configure, resolve,
-    emit: () => { for (const listener of [...listeners]) listener() },
+    wake: () => { for (const done of waiters.splice(0)) done() },
   }
 }
 
@@ -136,14 +144,14 @@ it('soft-locks initial and changed selections, then unsubscribes on dispose', as
 
   fake.configure.mockClear()
   fake.state.selection = 'sensevoice'
-  fake.emit()
+  fake.wake()
   await vi.waitFor(() => { expect(fake.configure).toHaveBeenCalledTimes(1) })
   expect(fake.state.selection).toBe('firered-local')
 
   dispose()
   fake.configure.mockClear()
   fake.state.selection = 'sensevoice'
-  fake.emit()
+  fake.wake()
   expect(fake.configure).not.toHaveBeenCalled()
 })
 

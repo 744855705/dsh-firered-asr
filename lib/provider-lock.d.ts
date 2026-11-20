@@ -1,10 +1,4 @@
 import type { SpeechRequest, SpeechSelectionPatch, SpeechSpec } from '@deepseek-ai/dsh-experimental-speech-to-text/types';
-declare module '@deepseek-ai/cordis' {
-    interface Events {
-        /** A volatile plugin configuration value changed; re-read live values. */
-        'loader/volatile-update'(): void;
-    }
-}
 /** Lock behaviour: soft reasserts, hard also blocks/forces the official service. */
 export type ProviderLockMode = 'soft' | 'hard';
 /** Validated lock-file contents. */
@@ -25,13 +19,17 @@ export interface LockSpeechService {
     };
     configure(patch: SpeechSelectionPatch): Promise<void>;
     resolve(request: SpeechRequest): SpeechSpec;
+    /** Complete readiness snapshots; changes whenever the official speech catalog changes. */
+    follow(caller: AbortSignal): AsyncIterable<{
+        selection: {
+            providerId: string;
+        };
+    }>;
 }
 /** Host-owned dependencies passed into the lock installer. */
 export interface ProviderLockRuntime {
     readonly speechToText: LockSpeechService;
     readonly logger: LockLogger;
-    /** Subscribe to volatile config updates; returns a disposer. */
-    onChange(listener: () => void): () => void;
 }
 /**
  * Read and validate the optional provider-lock file. The file is optional:
@@ -45,10 +43,10 @@ export interface ProviderLockRuntime {
 export declare function readProviderLock(path: string, expectedProviderId: string, logger: LockLogger): ProviderLock | undefined;
 /**
  * Install a soft or hard selection lock. Soft reasserts the target provider at
- * startup and whenever volatile configuration changes; hard additionally blocks
+ * startup and whenever the official catalog changes; hard additionally blocks
  * other provider selections and forces resolve() to the target.
- * @param runtime - speech service, logger, and volatile update subscription.
+ * @param runtime - speech service and logger.
  * @param lock - validated lock file.
- * @returns disposer removing the subscription and restoring hard wrappers.
+ * @returns disposer stopping the catalog observer and restoring hard wrappers.
  */
 export declare function installProviderLock(runtime: ProviderLockRuntime, lock: ProviderLock): () => void;

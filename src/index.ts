@@ -44,7 +44,6 @@ export function apply(ctx: Context, config: Config): void {
     const releaseLock = lock === undefined ? () => {} : installProviderLock({
       speechToText: ctx.speechToText,
       logger: ctx.logger,
-      onChange: listener => ctx.on('loader/volatile-update', listener),
     }, lock)
     return async () => {
       releaseLock()

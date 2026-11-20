@@ -8,15 +8,7 @@
  */
 import { readFileSync } from 'node:fs'
 import { TextDecoder } from 'node:util'
-import type {} from '@deepseek-ai/cordis'
 import type { SpeechProviderId, SpeechRequest, SpeechSelectionPatch, SpeechSpec } from '@deepseek-ai/dsh-experimental-speech-to-text/types'
-
-declare module '@deepseek-ai/cordis' {
-  interface Events {
-    /** A volatile plugin configuration value changed; re-read live values. */
-    'loader/volatile-update'(): void
-  }
-}
 
 /** Lock behaviour: soft reasserts, hard also blocks/forces the official service. */
 export type ProviderLockMode = 'soft' | 'hard'
@@ -37,14 +29,14 @@ export interface LockSpeechService {
   snapshot(): { selection: { providerId: string } }
   configure(patch: SpeechSelectionPatch): Promise<void>
   resolve(request: SpeechRequest): SpeechSpec
+  /** Complete readiness snapshots; changes whenever the official speech catalog changes. */
+  follow(caller: AbortSignal): AsyncIterable<{ selection: { providerId: string } }>
 }
 
 /** Host-owned dependencies passed into the lock installer. */
 export interface ProviderLockRuntime {
   readonly speechToText: LockSpeechService
   readonly logger: LockLogger
-  /** Subscribe to volatile config updates; returns a disposer. */
-  onChange(listener: () => void): () => void
 }
 
 /**
@@ -115,7 +107,7 @@ export function readProviderLock(path: string, expectedProviderId: string, logge
 /**
  * Install the hard-mode wrappers around the official speech service.
  * Failure to assign the wrappers logs once and falls back to soft lock.
- * @param runtime - speech service, logger, and volatile update subscription.
+ * @param runtime - speech service and logger.
  * @param target - provider id to force.
  * @returns disposer restoring only the wrappers still installed by this call.
  */
@@ -152,11 +144,11 @@ function installHardLock(runtime: ProviderLockRuntime, target: SpeechProviderId)
 
 /**
  * Install a soft or hard selection lock. Soft reasserts the target provider at
- * startup and whenever volatile configuration changes; hard additionally blocks
+ * startup and whenever the official catalog changes; hard additionally blocks
  * other provider selections and forces resolve() to the target.
- * @param runtime - speech service, logger, and volatile update subscription.
+ * @param runtime - speech service and logger.
  * @param lock - validated lock file.
- * @returns disposer removing the subscription and restoring hard wrappers.
+ * @returns disposer stopping the catalog observer and restoring hard wrappers.
  */
 export function installProviderLock(runtime: ProviderLockRuntime, lock: ProviderLock): () => void {
   const target = lock.providerId as SpeechProviderId
@@ -191,11 +183,23 @@ export function installProviderLock(runtime: ProviderLockRuntime, lock: Provider
         }
       })
   }
-  const off = runtime.onChange(enforce)
+  const controller = new AbortController()
+  const watch = async (): Promise<void> => {
+    try {
+      for await (const snapshot of runtime.speechToText.follow(controller.signal)) {
+        if (snapshot.selection.providerId !== target) enforce()
+      }
+    } catch (error) {
+      if (!disposed && !controller.signal.aborted) {
+        runtime.logger.warn('FireRedASR2 provider lock lost the speech catalog', error)
+      }
+    }
+  }
+  void watch()
   enforce()
   return () => {
     disposed = true
-    off()
+    controller.abort()
     restore()
   }
 }
