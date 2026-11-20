@@ -30,6 +30,8 @@ DeepSeek Harness（dsh）的本地离线语音识别 provider。麦克风录音�
   `punctuation=false` 时完全不加载标点模型。
 - **受管子进程**：一次只跑一个任务；回环 HTTP + 随机 bearer token；取消时终止并等待
   进程退出；空闲 2 小时停止 worker，模型缓存保留，下次录音重新唤醒。
+- **可选的识别器选择锁**：在 `$DSH_HOME/firered-asr-lock.json` 放置 soft/hard 锁文件，
+  启动和配置变化时把选择拉回 FireRed；profile 被刷新也不会丢，插件只读、不写、不 watch。
 
 ## 环境要求
 
@@ -50,7 +52,7 @@ DeepSeek Harness（dsh）的本地离线语音识别 provider。麦克风录音�
 ### 从 tarball（推荐先验证构建产物）
 
 ```bash
-dsh plugin --profile web add ./dsh-firered-asr-0.1.6.tgz
+dsh plugin --profile web add ./dsh-firered-asr-0.1.7.tgz
 ```
 
 ### 从 GitHub（公开仓库）
@@ -141,6 +143,52 @@ rm -rf ~/.dsh/speech-to-text/firered
     punctuationModelDirectory: /data/models/sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12-int8
 ```
 
+## 锁定识别器
+
+手机端/某些 profile 在重启时会把 `defaultProvider` 刷回默认，直接改 profile 文件不可靠。
+0.1.7 起提供 profile 外的锁文件：
+
+- 路径：`$DSH_HOME/firered-asr-lock.json`；默认 `~/.dsh/firered-asr-lock.json`，Windows 为
+  `C:\Users\<user>\.dsh\firered-asr-lock.json`。`$DSH_HOME` 为空/未设置时用 `~/.dsh`。
+- 内容（纯 ASCII JSON，不含路径/JS/YAML）：
+
+  ```json
+  { "providerId": "firered-local", "mode": "soft" }
+  ```
+
+  - `mode: "soft"`（默认）：启动时和官方选择变化后，把选择改回 FireRed；客户端可能短暂
+    显示一次其他 provider，但最终不会被留在默认。
+  - `mode: "hard"`：额外拒绝其他 provider 的 `configure`，并把 `resolve` 强制为 FireRed；
+    更彻底，但手机客户端可能收到失败提示。
+  - `providerId` 可省略；显式给出时必须等于 `firered-local`，否则告警并按未锁定处理。
+
+- 创建/删除锁文件后需要**重载/重启 DSH** 才生效；插件在启动时读取一次。
+- 插件**只读**锁文件：不创建、不写、不 `watch`；缺失、损坏、`EACCES`/`EPERM`/`EBUSY` 等
+  读取错误只 `warn` 并按未锁定处理，不会让插件启动失败。支持 UTF-8（含 BOM）、UTF-16LE、
+  UTF-16BE 和 CRLF；Windows Notepad 保存的 UTF-16LE 也可读。
+- 启动日志会打印锁文件路径与 mode；`configure` 失败时按未持久化 `warn`。
+- 锁只锁 **Host 的默认选择**。硬锁下如果手机 App 完全在本地维护选择，实际转写仍强制
+  FireRed，但 UI 可能仍显示另一个；软锁则可能在客户端短暂显示后恢复。
+- 锁文件在 `$DSH_HOME`，同一台机器的 profile 共用；不同 Host/机器各自一份。手机连的是哪台
+  Host，就在那台 Host 放锁文件并安装 0.1.7。
+
+Linux 创建示例：
+
+```bash
+mkdir -p ~/.dsh
+cat > ~/.dsh/firered-asr-lock.json <<'EOF'
+{ "providerId": "firered-local", "mode": "soft" }
+EOF
+```
+
+Windows PowerShell：
+
+```powershell
+$dir = Join-Path $HOME '.dsh'
+New-Item -ItemType Directory -Force $dir | Out-Null
+Set-Content -LiteralPath (Join-Path $dir 'firered-asr-lock.json') -Encoding utf8 '{ "providerId": "firered-local", "mode": "soft" }'
+```
+
 ## 离线用法
 
 1. 下载一次 ASR 包
@@ -217,7 +265,7 @@ rm -rf ~/.dsh/speech-to-text/firered
 ```bash
 pnpm install
 pnpm build
-pnpm test                 # 101 个单测：配置/WAV/哈希/padding/CJK/队列/取消/协议/注册/兼容/标点/fail-open
+pnpm test                 # 110 个单测：配置/WAV/哈希/padding/CJK/队列/取消/协议/注册/兼容/标点/fail-open/选择锁
 # 真实模型集成（ASR 目录含 silero_vad.onnx；标点目录含 model.int8.onnx）：
 FIRERED_E2E_MODEL_DIR=/abs/model \
 FIRERED_E2E_VAD=/abs/silero_vad.onnx \
@@ -275,6 +323,8 @@ FIRERED_MODEL_DIR=/abs/model FIRERED_PUNCT=0 pnpm bench
 - **宿主官方 helper**：`DSH_INSTALL_DIR`、`process.argv[1]`、`cwd` 都不在 DSH 安装路径，或
   运行中 DSH 的官方 `validateWave`/timeout API 发生破坏性变化时，FireRed provider 行会明确
   失败；官方 SenseVoice 服务行独立，不会因此整体禁用。
+- **选择锁**：锁文件只读；软锁可能让客户端短暂显示其他 provider，硬锁可能让客户端
+  `configure` 报错；手机 App 若完全本地维护选择，Host 会强制 FireRed 转写，但 UI 可能滞后。
 
 ## 许可
 

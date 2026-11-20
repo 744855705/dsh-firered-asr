@@ -1,8 +1,9 @@
 /** Provider registration through the real speechToText service, without loading a model. */
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context, Service } from '@deepseek-ai/cordis'
+import type { SpeechProviderId } from '@deepseek-ai/dsh-experimental-speech-to-text/types'
 import SpeechToText from '@deepseek-ai/dsh-experimental-speech-to-text'
 import { afterEach, expect, it, vi } from 'vitest'
 import * as Provider from '../src/index.ts'
@@ -20,9 +21,11 @@ class FakeSubprocess extends Service {
 
 it('registers the local provider, advertises Chinese and English, and rejects ja', async () => {
   const root = await mkdtemp(join(tmpdir(), 'dsh-firered-provider-'))
+  vi.stubEnv('DSH_HOME', root)
   const ctx = new Context()
   cleanup.push(async () => { await ctx.fiber.dispose() })
   cleanup.push(async () => { await rm(root, { recursive: true, force: true }) })
+  cleanup.push(async () => { vi.unstubAllEnvs() })
   await ctx.plugin(FakeSubprocess)
   await ctx.plugin(SpeechToText, { defaultProvider: 'firered-local', language: 'auto' })
   const fiber = ctx.plugin(Provider, Config({ dataRoot: root, idleTimeoutMs: 0 }))
@@ -37,4 +40,23 @@ it('registers the local provider, advertises Chinese and English, and rejects ja
   expect(speech.resolve({ providerId: 'firered-local', language: 'zh', audio: new Uint8Array() })).toMatchObject({ language: 'zh' })
   await fiber.dispose()
   expect(speech.listProviders()).toEqual([])
+})
+
+it('installs the hard lock on the real speech service', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'dsh-firered-provider-hard-'))
+  vi.stubEnv('DSH_HOME', root)
+  await writeFile(join(root, 'firered-asr-lock.json'), JSON.stringify({ providerId: 'firered-local', mode: 'hard' }))
+  const ctx = new Context()
+  cleanup.push(async () => { await ctx.fiber.dispose() })
+  cleanup.push(async () => { await rm(root, { recursive: true, force: true }) })
+  cleanup.push(async () => { vi.unstubAllEnvs() })
+  await ctx.plugin(FakeSubprocess)
+  await ctx.plugin(SpeechToText, { defaultProvider: 'firered-local', language: 'auto' })
+  const fiber = ctx.plugin(Provider, Config({ dataRoot: root, idleTimeoutMs: 0 }))
+  await fiber
+  const speech = ctx.get('speechToText')!
+  await expect(speech.configure({ providerId: 'sensevoice' as SpeechProviderId })).rejects.toThrow('locked')
+  const spec = speech.resolve({ providerId: 'sensevoice' as SpeechProviderId, language: 'zh', audio: new Uint8Array() })
+  expect(spec.provider.info.id).toBe('firered-local')
+  await fiber.dispose()
 })

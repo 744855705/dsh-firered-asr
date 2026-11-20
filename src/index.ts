@@ -3,8 +3,9 @@ import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-experimental-speech-to-text'
 import type {} from '@deepseek-ai/dsh-subprocess'
 import type { SpeechProviderId } from '@deepseek-ai/dsh-experimental-speech-to-text/types'
-import { Config, validateConfig } from './config.ts'
+import { Config, defaultLockFile, validateConfig } from './config.ts'
 import { languages } from './input.ts'
+import { installProviderLock, readProviderLock } from './provider-lock.ts'
 import { FireRedWorker } from './recognizer.ts'
 
 export { Config } from './config.ts'
@@ -18,6 +19,9 @@ export const inject = ['speechToText', 'subprocess']
  */
 export function apply(ctx: Context, config: Config): void {
   validateConfig(config)
+  const lockPath = defaultLockFile()
+  const lock = readProviderLock(lockPath, config.providerId, ctx.logger)
+  if (lock !== undefined) ctx.logger.info(`FireRedASR2 provider lock active (${lock.mode}): ${lockPath}`)
   const worker = new FireRedWorker(ctx, config)
   ctx.effect(() => {
     const unregister = ctx.speechToText.register({
@@ -37,7 +41,13 @@ export function apply(ctx: Context, config: Config): void {
       transcribe: async (input, signal) => await worker.transcribe(input, signal),
     })
     worker.inspect()
+    const releaseLock = lock === undefined ? () => {} : installProviderLock({
+      speechToText: ctx.speechToText,
+      logger: ctx.logger,
+      onChange: listener => ctx.on('loader/volatile-update', listener),
+    }, lock)
     return async () => {
+      releaseLock()
       const removing = unregister()
       await worker.dispose()
       await removing

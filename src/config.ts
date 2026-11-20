@@ -14,8 +14,21 @@ function expandHomePath(value: string, home: string): string {
 }
 
 /**
- * Default cache root shared by every profile on the machine: `$DSH_HOME` when
- * non-blank, otherwise `~/.dsh`, then `speech-to-text/firered`. This mirrors the
+ * Resolve the DeepSeek Harness home shared by every profile on the machine:
+ * `$DSH_HOME` when non-blank, otherwise `~/.dsh`. The result is normalized to
+ * an absolute path with platform path rules.
+ * @param env - environment mapping to read `DSH_HOME` from.
+ * @param home - operating-system home used when `DSH_HOME` is absent or blank.
+ * @returns the normalized absolute harness home.
+ */
+export function defaultHarnessHome(env: Record<string, string | undefined> = process.env, home: string = homedir()): string {
+  const configured = env.DSH_HOME?.trim()
+  return resolve(configured === undefined || configured.length === 0 ? join(home, '.dsh') : expandHomePath(configured, home))
+}
+
+/**
+ * Default cache root shared by every profile on the machine:
+ * `$DSH_HOME`/`~/.dsh` followed by `speech-to-text/firered`. This mirrors the
  * official `resolveDshHome` precedence without adding an official runtime
  * dependency, and keeps the path independent of the profile directory.
  * @param env - environment mapping to read `DSH_HOME` from.
@@ -23,9 +36,18 @@ function expandHomePath(value: string, home: string): string {
  * @returns the normalized absolute cache root.
  */
 export function defaultDataRoot(env: Record<string, string | undefined> = process.env, home: string = homedir()): string {
-  const configured = env.DSH_HOME?.trim()
-  const root = configured === undefined || configured.length === 0 ? join(home, '.dsh') : expandHomePath(configured, home)
-  return join(resolve(root), 'speech-to-text', 'firered')
+  return join(defaultHarnessHome(env, home), 'speech-to-text', 'firered')
+}
+
+/**
+ * Provider-lock file under the shared harness home. It is deliberately outside
+ * the profile so a profile refresh cannot remove it.
+ * @param env - environment mapping to read `DSH_HOME` from.
+ * @param home - operating-system home used when `DSH_HOME` is absent or blank.
+ * @returns the normalized absolute lock-file path.
+ */
+export function defaultLockFile(env: Record<string, string | undefined> = process.env, home: string = homedir()): string {
+  return join(defaultHarnessHome(env, home), 'firered-asr-lock.json')
 }
 
 /** Release-pinned archive URL; an override must also provide `modelSha256`. */

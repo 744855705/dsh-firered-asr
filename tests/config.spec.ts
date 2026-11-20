@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs'
 import { isAbsolute, join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { Config, DEFAULT_MODEL_URL, DEFAULT_PUNCTUATION_MODEL_URL, defaultDataRoot, validateConfig } from '../src/config.ts'
+import { Config, DEFAULT_MODEL_URL, DEFAULT_PUNCTUATION_MODEL_URL, defaultDataRoot, defaultLockFile, validateConfig } from '../src/config.ts'
 
 const base = { dataRoot: '/cache/firered' }
 
@@ -39,6 +39,14 @@ describe('Config', () => {
     expect(defaultDataRoot({ DSH_HOME: '   ' }, home)).toBe(join(home, '.dsh', 'speech-to-text', 'firered'))
     expect(defaultDataRoot({ DSH_HOME: '~/custom' }, home)).toBe(join(home, 'custom', 'speech-to-text', 'firered'))
     expect(defaultDataRoot({}, home)).toBe(join(home, '.dsh', 'speech-to-text', 'firered'))
+  })
+
+  it('derives the provider-lock file from the same harness home', () => {
+    const home = resolve('firered-test-home')
+    const dshHome = join(home, 'dsh-home')
+    expect(defaultLockFile({ DSH_HOME: dshHome }, home)).toBe(join(dshHome, 'firered-asr-lock.json'))
+    expect(defaultLockFile({ DSH_HOME: '   ' }, home)).toBe(join(home, '.dsh', 'firered-asr-lock.json'))
+    expect(defaultLockFile({}, home)).toBe(join(home, '.dsh', 'firered-asr-lock.json'))
   })
 
   it('bundle patch no longer evaluates a profile-layer JS expression', () => {
